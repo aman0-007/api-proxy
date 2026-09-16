@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>API Client Pro</title>
+    <link rel="stylesheet" href="./css/base.css">
+    <link rel="stylesheet" href="./css/forms.css">
+    <link rel="stylesheet" href="./css/components.css">
+</head>
+<body>
+    <header class="app-header">
+        <h1 class="app-title">API Client Pro</h1>
+        <div class="header-actions">
+            <button id="open-env-btn">Env</button>
+            <button id="open-history-btn">History</button>
+            <button id="open-collections-btn">Collections</button>
+        </div>
+    </header>
+
+    <main class="scroll-container" id="main-scroll">
+        <section class="action-bar">
+            <div class="custom-dropdown" id="method-dropdown">
+                <div class="dropdown-selected clr-get" data-value="GET">GET</div>
+                <div class="dropdown-options hidden">
+                    <div class="dropdown-item clr-get" data-value="GET">GET</div>
+                    <div class="dropdown-item clr-post" data-value="POST">POST</div>
+                    <div class="dropdown-item clr-put" data-value="PUT">PUT</div>
+                    <div class="dropdown-item clr-patch" data-value="PATCH">PATCH</div>
+                    <div class="dropdown-item clr-delete" data-value="DELETE">DELETE</div>
+                </div>
+            </div>
+            <input type="text" id="url-input" placeholder="{{base_url}}/api/users" autocomplete="off" />
+            <button id="send-btn">SEND</button>
+        </section>
+
+        <section class="request-config">
+            <div class="tabs-wrapper">
+                <div class="tabs">
+                    <button class="tab-btn active" data-tab="tab-auth">Auth</button>
+                    <button class="tab-btn" data-tab="tab-params">Params</button>
+                    <button class="tab-btn" data-tab="tab-headers">Headers</button>
+                    <button class="tab-btn" data-tab="tab-body">Body</button>
+                </div>
+                
+                <div class="btn-group">
+                    <button id="code-btn" title="Code Snippets">&lt;/&gt;</button>
+                    <button id="save-btn">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="save-icon"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                        Save
+                    </button>
+                </div>
+            </div>
+
+            <div id="tab-auth" class="tab-content active">
+                <div class="auth-toolbar">
+                    <span class="toolbar-label">Type:</span>
+                    <div class="custom-dropdown mini-dropdown" id="auth-type-dropdown">
+                        <div class="dropdown-selected" data-value="none">No Auth</div>
+                        <div class="dropdown-options hidden">
+                            <div class="dropdown-item" data-value="none">No Auth</div>
+                            <div class="dropdown-item" data-value="bearer">Bearer Token</div>
+                            <div class="dropdown-item" data-value="basic">Basic Auth</div>
+                        </div>
+                    </div>
+                </div>
+                <div id="auth-inputs">
+                    <p class="text-muted mt-10">This request does not use any authorization.</p>
+                </div>
+            </div>
+
+            <div id="tab-params" class="tab-content">
+                <div id="params-list"></div>
+                <button id="add-param-btn" class="dashed-add-btn">+ Add Param</button>
+            </div>
+            <div id="tab-headers" class="tab-content">
+                <div id="headers-list"></div>
+                <button id="add-header-btn" class="dashed-add-btn">+ Add Header</button>
+            </div>
+            <div id="tab-body" class="tab-content">
+                <div class="body-toolbar">
+                    <span class="toolbar-label">Format:</span>
+                    <div class="custom-dropdown mini-dropdown" id="body-format-dropdown">
+                        <div class="dropdown-selected" data-value="json">JSON</div>
+                        <div class="dropdown-options hidden">
+                            <div class="dropdown-item" data-value="json">JSON</div>
+                            <div class="dropdown-item" data-value="xml">XML</div>
+                            <div class="dropdown-item" data-value="text">Text</div>
+                        </div>
+                    </div>
+                </div>
+                <textarea id="request-body" placeholder='{&#10;  "key": "value"&#10;}'></textarea>
+            </div>
+        </section>
+
+        <section class="response-viewer" id="response-section">
+            <div class="response-meta">
+                <div class="meta-badges">
+                    <span id="status-badge" class="badge badge-default">Ready</span>
+                    <span id="time-badge" class="badge badge-default">0ms</span>
+                    <span id="size-badge" class="badge badge-default">0 B</span>
+                </div>
+                <div class="format-selector">
+                    <span class="toolbar-label">View as:</span>
+                    <div class="custom-dropdown mini-dropdown" id="response-format-dropdown">
+                        <div class="dropdown-selected" data-value="auto">Auto</div>
+                        <div class="dropdown-options hidden">
+                            <div class="dropdown-item" data-value="auto">Auto</div>
+                            <div class="dropdown-item" data-value="json">JSON</div>
+                            <div class="dropdown-item" data-value="xml">XML</div>
+                            <div class="dropdown-item" data-value="csv">CSV</div>
+                            <div class="dropdown-item" data-value="text">Text</div>
+                        </div>
+                    </div>
+                    <button id="export-resp-btn" class="primary-btn ml-10">Export</button>
+                </div>
+            </div>
+            <div class="response-window"><pre><code id="response-output">Awaiting request...</code></pre></div>
+        </section>
+    </main>
+
+    <div id="history-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>History</h2>
+                <div class="btn-group">
+                    <button id="clear-history-btn" class="danger-btn">Clear All</button>
+                    <button class="close-modal-btn">Close</button>
+                </div>
+            </div>
+            <ul id="history-list" class="item-list"></ul>
+        </div>
+    </div>
+    
+    <div id="collections-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Collections</h2>
+                <div class="btn-group">
+                    <button id="import-col-btn" class="outline-btn">Import</button>
+                    <button id="export-col-btn" class="outline-btn">Export</button>
+                    <button class="close-modal-btn">Close</button>
+                </div>
+            </div>
+            <div id="collections-list" class="item-list"></div>
+        </div>
+    </div>
+
+    <div id="env-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Environment Variables</h2>
+                <button class="close-modal-btn">Close</button>
+            </div>
+            <p class="text-muted mb-10">Use {{variable_name}} in URL, Headers, or Body.</p>
+            <div id="env-list"></div>
+            <button id="add-env-btn" class="dashed-add-btn mt-10">+ Add Variable</button>
+            <button id="save-env-btn" class="primary-btn full-width-btn mt-15">Save Variables</button>
+        </div>
+    </div>
+
+    <script src="./js/core/services.js"></script>
+    <script src="./js/ui/components.js"></script>
+    <script src="./js/app.js"></script>
+</body>
+</html>

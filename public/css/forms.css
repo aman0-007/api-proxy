@@ -1,0 +1,58 @@
+/* Global Inputs & Buttons */
+input, button, textarea { background-color: #1c1d24; border: 1px solid #2e303d; color: #fff; border-radius: 6px; font-size: 14px; outline: none; padding: 10px; transition: border-color 0.2s; }
+input:focus, textarea:focus { border-color: #ff6c37; }
+
+/* Button Variants & Press Animations */
+button { transition: transform 0.1s ease, background-color 0.2s, border-color 0.2s, color 0.2s; }
+button:active { transform: scale(0.96); } /* The press down effect */
+
+.primary-btn { background-color: #ff6c37; border-color: #ff6c37; color: #fff; font-weight: bold; cursor: pointer; }
+.primary-btn:active { background-color: #e05522; }
+.danger-btn { background-color: #b71c1c; color: #fff; border: none; padding: 6px 12px; font-size: 12px; cursor: pointer; border-radius: 4px; }
+.dashed-add-btn { width: 100%; background: transparent; border: 1px dashed #3e4152; color: #8c90a4; font-size: 13px; padding: 8px; cursor: pointer; }
+
+/* Extracted Button Styles & Utilities */
+.btn-group { display: flex; gap: 8px; align-items: center; }
+.outline-btn { background: transparent; border: 1px solid #3e4152; color: #ccc; padding: 4px 8px; border-radius: 4px; font-size: 12px; cursor: pointer; }
+.outline-btn:hover { border-color: #ff6c37; color: #fff; }
+.full-width-btn { width: 100%; padding: 12px; }
+
+.header-actions button { background: transparent; border: 1px solid #3e4152; color: #ff6c37; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; }
+#save-btn { display: flex; align-items: center; gap: 6px; background: transparent; border: 1px solid #ff6c37; color: #ff6c37; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; }
+#save-btn:hover { color: #fff; border-color: #ff6c37; }
+#send-btn { background-color: #ff6c37; border-color: #ff6c37; color: #fff; font-weight: bold; cursor: pointer; padding: 10px 16px; }
+.remove-btn { background: #cf6679; border-color: #cf6679; color: #121212; font-weight: bold; padding: 8px 12px; cursor: pointer; }
+#code-btn { background: transparent; border: 1px solid #3e4152; color: #8c90a4; padding: 4px 10px; border-radius: 4px; font-weight: bold; cursor: pointer; }
+#code-btn:hover { color: #fff; border-color: #ff6c37; }
+#export-resp-btn { padding: 4px 10px; font-size: 12px; }
+
+/* Inputs */
+#url-input { flex: 1; min-width: 120px; }
+#request-body { width: 100%; height: 140px; font-family: monospace; font-size: 13px; resize: vertical; }
+
+/* Custom Dropdowns */
+.custom-dropdown { position: relative; user-select: none; }
+.dropdown-selected { background-color: #1c1d24; border: 1px solid #2e303d; color: #fff; border-radius: 6px; padding: 10px 14px; font-size: 14px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; min-width: 95px; transition: border-color 0.2s; }
+.dropdown-selected::after { content: '▼'; font-size: 10px; margin-left: 10px; color: #8c90a4; }
+.dropdown-options { position: absolute; top: calc(100% + 4px); left: 0; min-width: 100%; background-color: #1c1d24; border: 1px solid #2e303d; border-radius: 6px; z-index: 50; box-shadow: 0 8px 16px rgba(0,0,0,0.6); overflow: hidden; }
+.dropdown-item { padding: 10px 14px; font-size: 14px; cursor: pointer; color: #fff; transition: background 0.2s; }
+.dropdown-item:hover { background-color: #2e303d; }
+.mini-dropdown .dropdown-selected { padding: 4px 8px; font-size: 12px; min-width: 70px; border-radius: 4px; }
+.mini-dropdown .dropdown-item { padding: 8px 10px; font-size: 12px; }
+
+/* Tabs & Animations */
+.tabs { display: flex; gap: 4px; }
+.tab-btn { background: transparent; border: none; padding: 6px 8px; color: #8c90a4; border-radius: 0; font-weight: 600; cursor: pointer; font-size: 12px; }
+.tab-btn.active { color: #ff6c37; border-bottom: 2px solid #ff6c37; }
+.tab-content { display: none; margin-bottom: 20px; }
+.tab-content.active { display: block; animation: fadeSlideUp 0.25s ease-out forwards; } /* Smooth tab entry */
+
+@keyframes fadeSlideUp {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.body-toolbar, .auth-toolbar, .format-selector { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.toolbar-label { font-size: 12px; color: #8c90a4; }
+.input-row { display: flex; gap: 6px; margin-bottom: 8px; }
+.input-row input { flex: 1; min-width: 0; padding: 8px; font-size: 13px; }

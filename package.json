@@ -1,0 +1,14 @@
+{
+  "name": "api-proxy",
+  "version": "1.0.0",
+  "description": "Backend proxy for custom API client",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2"
+  }
+}
