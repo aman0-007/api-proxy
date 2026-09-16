@@ -18,6 +18,7 @@ button:active { transform: scale(0.96); } /* The press down effect */
 .full-width-btn { width: 100%; padding: 12px; }
 
 .header-actions button { background: transparent; border: 1px solid #3e4152; color: #ff6c37; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.header-actions button:hover { border-color: #ff6c37; color: #fff; }
 #save-btn { display: flex; align-items: center; gap: 6px; background: transparent; border: 1px solid #ff6c37; color: #ff6c37; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; }
 #save-btn:hover { color: #fff; border-color: #ff6c37; }
 #send-btn { background-color: #ff6c37; border-color: #ff6c37; color: #fff; font-weight: bold; cursor: pointer; padding: 10px 16px; }
@@ -32,13 +33,33 @@ button:active { transform: scale(0.96); } /* The press down effect */
 
 /* Custom Dropdowns */
 .custom-dropdown { position: relative; user-select: none; }
+.custom-dropdown.is-open { z-index: 200 !important; }
 .dropdown-selected { background-color: #1c1d24; border: 1px solid #2e303d; color: #fff; border-radius: 6px; padding: 10px 14px; font-size: 14px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; min-width: 95px; transition: border-color 0.2s; }
 .dropdown-selected::after { content: '▼'; font-size: 10px; margin-left: 10px; color: #8c90a4; }
 .dropdown-options { position: absolute; top: calc(100% + 4px); left: 0; min-width: 100%; background-color: #1c1d24; border: 1px solid #2e303d; border-radius: 6px; z-index: 50; box-shadow: 0 8px 16px rgba(0,0,0,0.6); overflow: hidden; }
+.custom-dropdown.is-open .dropdown-options { z-index: 250 !important; }
 .dropdown-item { padding: 10px 14px; font-size: 14px; cursor: pointer; color: #fff; transition: background 0.2s; }
 .dropdown-item:hover { background-color: #2e303d; }
 .mini-dropdown .dropdown-selected { padding: 4px 8px; font-size: 12px; min-width: 70px; border-radius: 4px; }
 .mini-dropdown .dropdown-item { padding: 8px 10px; font-size: 12px; }
+
+/* Ensure Auth type & Body format dropdowns float cleanly above response viewer "View as" dropdown */
+#auth-type-dropdown,
+#body-format-dropdown {
+    position: relative;
+    z-index: 100;
+}
+#auth-type-dropdown .dropdown-options,
+#body-format-dropdown .dropdown-options {
+    z-index: 150;
+}
+#response-format-dropdown {
+    position: relative;
+    z-index: 1;
+}
+#response-format-dropdown .dropdown-options {
+    z-index: 10;
+}
 
 /* Tabs & Animations */
 .tabs { display: flex; gap: 4px; }
@@ -54,5 +75,51 @@ button:active { transform: scale(0.96); } /* The press down effect */
 
 .body-toolbar, .auth-toolbar, .format-selector { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .toolbar-label { font-size: 12px; color: #8c90a4; }
-.input-row { display: flex; gap: 6px; margin-bottom: 8px; }
+.input-row { display: flex; gap: 6px; margin-bottom: 8px; align-items: center; }
 .input-row input { flex: 1; min-width: 0; padding: 8px; font-size: 13px; }
+
+/* Checkbox Toggle for Params / Headers */
+.row-toggle-wrap { display: flex; align-items: center; justify-content: center; padding: 0 3px; flex-shrink: 0; cursor: pointer; user-select: none; }
+.row-toggle {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    border: 1.5px solid #3e4152;
+    border-radius: 4px;
+    background-color: #121318;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.15s ease;
+    padding: 0 !important;
+    margin: 0 !important;
+    flex: none !important;
+}
+.row-toggle:checked {
+    background-color: #ff6c37;
+    border-color: #ff6c37;
+}
+.row-toggle:checked::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 5px;
+    width: 4px;
+    height: 8px;
+    border: solid #ffffff;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+.row-toggle:hover { border-color: #ff6c37; }
+.row-toggle:focus { outline: none; border-color: #ff6c37; }
+
+/* Disabled Row Appearance */
+.input-row.row-disabled input.h-key,
+.input-row.row-disabled input.h-val {
+    opacity: 0.38;
+    text-decoration: line-through;
+    color: #8c90a4;
+}
+
+.btn-icon { vertical-align: middle; margin-right: 4px; }
+

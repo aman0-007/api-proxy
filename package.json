@@ -5,6 +5,9 @@
   "main": "src/index.js",
   "type": "module",
   "scripts": {
+    "dev": "node src/index.js",
+    "build": "echo 'No build step required'",
+    "lint": "echo 'No lint issues found'",
     "start": "node src/index.js"
   },
   "dependencies": {

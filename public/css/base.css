@@ -15,9 +15,10 @@ body { background-color: #121318; color: #e0e0e0; height: 100dvh; position: fixe
 .scroll-container { flex: 1; overflow-y: auto; padding: 12px; scroll-behavior: smooth; position: relative; }
 
 /* Sections & Spacing */
-.action-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; align-items: center; }
+.action-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; align-items: center; position: relative; z-index: 30; }
+.request-config { position: relative; z-index: 20; }
 .tabs-wrapper { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #2e303d; margin-bottom: 12px; padding-bottom: 6px; flex-wrap: wrap; gap: 6px; }
-.response-viewer { border-top: 1px solid #2e303d; padding-top: 10px; padding-bottom: 30px; }
+.response-viewer { border-top: 1px solid #2e303d; padding-top: 10px; padding-bottom: 30px; position: relative; z-index: 5; }
 .response-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; flex-wrap: wrap; gap: 10px; }
 .response-window { background: #1c1d24; border: 1px solid #2e303d; border-radius: 6px; padding: 12px; overflow-x: auto; min-height: 180px; }
 

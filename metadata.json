@@ -1,0 +1,8 @@
+{
+  "name": "API Client Pro",
+  "description": "Custom API client and proxy for making HTTP requests, testing endpoints, and managing collections.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>API Client Pro</title>
+    <meta name="description" content="Custom API client and proxy for making HTTP requests, testing endpoints, and managing collections.">
+    <meta property="og:title" content="API Client Pro">
+    <meta property="og:description" content="Custom API client and proxy for making HTTP requests, testing endpoints, and managing collections.">
     <link rel="stylesheet" href="./css/base.css">
     <link rel="stylesheet" href="./css/forms.css">
     <link rel="stylesheet" href="./css/components.css">
@@ -12,7 +15,8 @@
     <header class="app-header">
         <h1 class="app-title">API Client Pro</h1>
         <div class="header-actions">
-            <button id="open-env-btn">Env</button>
+            <button id="open-env-btn">Env(dev)</button>
+            <button id="open-chains-btn">Workflows</button>
             <button id="open-history-btn">History</button>
             <button id="open-collections-btn">Collections</button>
         </div>
@@ -60,6 +64,7 @@
                         <div class="dropdown-options hidden">
                             <div class="dropdown-item" data-value="none">No Auth</div>
                             <div class="dropdown-item" data-value="bearer">Bearer Token</div>
+                            <div class="dropdown-item" data-value="apikey">API Key</div>
                             <div class="dropdown-item" data-value="basic">Basic Auth</div>
                         </div>
                     </div>
@@ -78,29 +83,86 @@
                 <button id="add-header-btn" class="dashed-add-btn">+ Add Header</button>
             </div>
             <div id="tab-body" class="tab-content">
-                <div class="body-toolbar">
-                    <span class="toolbar-label">Format:</span>
-                    <div class="custom-dropdown mini-dropdown" id="body-format-dropdown">
-                        <div class="dropdown-selected" data-value="json">JSON</div>
-                        <div class="dropdown-options hidden">
-                            <div class="dropdown-item" data-value="json">JSON</div>
-                            <div class="dropdown-item" data-value="xml">XML</div>
-                            <div class="dropdown-item" data-value="text">Text</div>
+                <div class="body-format-controls">
+                    <div class="body-toolbar" style="margin-bottom:0;">
+                        <span class="toolbar-label">Format:</span>
+                        <div class="custom-dropdown mini-dropdown" id="body-format-dropdown">
+                            <div class="dropdown-selected" data-value="json">JSON</div>
+                            <div class="dropdown-options hidden">
+                                <div class="dropdown-item" data-value="json">JSON</div>
+                                <div class="dropdown-item" data-value="form-data">multipart/form-data</div>
+                                <div class="dropdown-item" data-value="urlencoded">x-www-form-urlencoded</div>
+                                <div class="dropdown-item" data-value="binary">Raw Binary / File</div>
+                                <div class="dropdown-item" data-value="xml">XML</div>
+                                <div class="dropdown-item" data-value="text">Text</div>
+                                <div class="dropdown-item" data-value="none">None</div>
+                            </div>
                         </div>
                     </div>
+                    <div class="body-actions">
+                        <button id="prettify-body-btn" class="outline-btn mini-btn" title="Format and validate JSON">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/></svg>
+                            Prettify JSON
+                        </button>
+                    </div>
                 </div>
-                <textarea id="request-body" placeholder='{&#10;  "key": "value"&#10;}'></textarea>
+
+                <!-- Raw editor for JSON, XML, Text -->
+                <div id="body-raw-container">
+                    <textarea id="request-body" placeholder='{&#10;  "key": "value"&#10;}'></textarea>
+                </div>
+
+                <!-- Multipart Form-Data editor -->
+                <div id="body-form-data-container" class="hidden">
+                    <div id="form-data-list"></div>
+                    <button id="add-form-data-btn" class="dashed-add-btn">+ Add Form Field</button>
+                </div>
+
+                <!-- x-www-form-urlencoded editor -->
+                <div id="body-urlencoded-container" class="hidden">
+                    <div id="urlencoded-list"></div>
+                    <button id="add-urlencoded-btn" class="dashed-add-btn">+ Add Key-Value Pair</button>
+                </div>
+
+                <!-- Raw Binary Upload editor -->
+                <div id="body-binary-container" class="hidden">
+                    <input type="file" id="binary-file-input" class="hidden" />
+                    <div class="binary-dropzone" id="binary-dropzone">
+                        <svg class="dropzone-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+                        <div class="dropzone-text">Click or drag a file to upload</div>
+                        <div class="dropzone-subtext">Supports images, PDFs, audio, archives, and arbitrary binaries</div>
+                    </div>
+                    <div id="binary-file-info" class="binary-file-info hidden">
+                        <div class="file-info-details">
+                            <span class="file-info-name" id="binary-info-name">filename.ext</span>
+                            <span class="file-info-meta" id="binary-info-meta">0 KB • application/octet-stream</span>
+                        </div>
+                        <button type="button" id="clear-binary-btn" class="outline-btn mini-btn danger-btn" style="background:#b71c1c; border-color:#b71c1c; color:#fff;">Remove</button>
+                    </div>
+                </div>
+
+                <!-- None container -->
+                <div id="body-none-container" class="hidden">
+                    <p class="text-muted mt-10">This request does not have a body.</p>
+                </div>
             </div>
         </section>
 
         <section class="response-viewer" id="response-section">
-            <div class="response-meta">
+            <div class="response-top-bar">
+                <div class="response-tabs">
+                    <button class="resp-tab-btn active" data-resp-tab="resp-tab-body">Body</button>
+                    <button class="resp-tab-btn" data-resp-tab="resp-tab-headers">Headers <span id="resp-headers-count" class="tab-count-badge">0</span></button>
+                </div>
                 <div class="meta-badges">
                     <span id="status-badge" class="badge badge-default">Ready</span>
                     <span id="time-badge" class="badge badge-default">0ms</span>
                     <span id="size-badge" class="badge badge-default">0 B</span>
                 </div>
-                <div class="format-selector">
+            </div>
+
+            <div class="response-meta">
+                <div class="format-selector" id="response-format-selector">
                     <span class="toolbar-label">View as:</span>
                     <div class="custom-dropdown mini-dropdown" id="response-format-dropdown">
                         <div class="dropdown-selected" data-value="auto">Auto</div>
@@ -112,10 +174,47 @@
                             <div class="dropdown-item" data-value="text">Text</div>
                         </div>
                     </div>
-                    <button id="export-resp-btn" class="primary-btn ml-10">Export</button>
+                </div>
+                <div id="response-headers-meta" style="display:none; align-items:center; gap:8px;">
+                    <span class="toolbar-label" style="font-size:12px; color:#8c90a4;">HTTP Response Headers</span>
+                </div>
+                <div class="response-actions">
+                    <button id="copy-resp-btn" class="outline-btn" title="Copy response to clipboard">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="btn-icon"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                        <span id="copy-resp-text">Copy</span>
+                    </button>
+                    <button id="export-resp-btn" class="primary-btn">Export</button>
                 </div>
             </div>
-            <div class="response-window"><pre><code id="response-output">Awaiting request...</code></pre></div>
+
+            <div id="resp-tab-body" class="resp-tab-content active">
+                <div class="response-window">
+                    <div class="response-code-container" id="response-code-container">
+                        <div class="code-gutter" id="response-gutter" aria-hidden="true"><span>1</span></div>
+                        <pre class="code-pre"><code id="response-output">Awaiting request...</code></pre>
+                    </div>
+                </div>
+            </div>
+
+            <div id="resp-tab-headers" class="resp-tab-content hidden">
+                <div class="response-headers-window">
+                    <div id="response-headers-empty" class="headers-empty-msg">No response headers yet. Send a request to inspect headers.</div>
+                    <div id="response-headers-container" class="hidden">
+                        <input type="text" id="headers-filter-input" class="headers-filter-input" placeholder="Filter headers by key or value..." autocomplete="off" />
+                        <div class="headers-table-wrapper">
+                            <table class="headers-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 38%;">Header</th>
+                                        <th>Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="response-headers-tbody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </section>
     </main>
 
@@ -149,13 +248,81 @@
     <div id="env-modal" class="modal hidden">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>Environment Variables</h2>
+                <h2>Environment Profiles</h2>
                 <button class="close-modal-btn">Close</button>
             </div>
-            <p class="text-muted mb-10">Use {{variable_name}} in URL, Headers, or Body.</p>
-            <div id="env-list"></div>
+            <div class="profile-tabs-bar">
+                <div id="profile-tabs-list" style="display:flex; gap:6px; align-items:center;"></div>
+                <button id="new-profile-btn" class="new-profile-btn">+ New Profile</button>
+            </div>
+            <div class="profile-meta-bar" id="profile-meta-bar">
+                <div class="profile-title-wrap">
+                    <span class="profile-title-name" id="viewing-profile-name">Development</span>
+                    <span class="profile-active-tag" id="viewing-profile-tag">Active</span>
+                </div>
+                <div class="btn-group">
+                    <button id="set-active-profile-btn" class="outline-btn mini-btn hidden">Set Active</button>
+                    <button id="duplicate-profile-btn" class="outline-btn mini-btn">Duplicate</button>
+                    <button id="rename-profile-btn" class="outline-btn mini-btn">Rename</button>
+                    <button id="delete-profile-btn" class="danger-btn mini-btn">Delete</button>
+                </div>
+            </div>
+            <p class="text-muted mb-10">Use {{variable_name}} in URL, Headers, Auth, or Body.</p>
+            <div id="env-list" style="max-height: 280px; overflow-y: auto; margin-bottom: 8px;"></div>
             <button id="add-env-btn" class="dashed-add-btn mt-10">+ Add Variable</button>
             <button id="save-env-btn" class="primary-btn full-width-btn mt-15">Save Variables</button>
+        </div>
+    </div>
+
+    <div id="chains-modal" class="modal hidden">
+        <div class="modal-content chains-modal-content">
+            <div class="modal-header">
+                <div class="chain-header-title-wrap">
+                    <h2>Dynamic Request Workflows</h2>
+                    <span class="chain-subtitle-badge">Chaining & Assertions</span>
+                </div>
+                <div class="btn-group chain-header-actions">
+                    <button id="run-all-chain-btn" class="primary-btn mini-btn chain-run-btn">▶ Run Entire Chain</button>
+                    <button id="new-chain-btn" class="outline-btn mini-btn">+ New Workflow</button>
+                    <button class="close-modal-btn">Close</button>
+                </div>
+            </div>
+
+            <div class="chain-meta-bar">
+                <div class="chain-select-wrap">
+                    <label for="chain-select" class="chain-label">Active Workflow:</label>
+                    <select id="chain-select" class="chain-select"></select>
+                </div>
+                <div class="btn-group chain-management-btns">
+                    <button id="duplicate-chain-btn" class="outline-btn mini-btn">Duplicate</button>
+                    <button id="rename-chain-btn" class="outline-btn mini-btn">Rename</button>
+                    <button id="delete-chain-btn" class="danger-btn mini-btn">Delete</button>
+                </div>
+            </div>
+
+            <div class="chain-ribbon" id="chain-ribbon">
+                <div class="chain-ribbon-left">
+                    <span id="chain-status-pill" class="badge badge-default">Ready</span>
+                    <span id="chain-duration-pill" class="badge badge-default">0ms</span>
+                    <span id="chain-steps-count-pill" class="badge badge-default">0 Steps</span>
+                </div>
+                <div class="chain-vars-preview" id="chain-vars-preview">
+                    <span class="chain-vars-label">Runtime Variables:</span>
+                    <div id="chain-vars-chips" class="chain-vars-chips">
+                        <span class="text-muted text-xs">Run workflow to populate variables</span>
+                    </div>
+                </div>
+            </div>
+
+            <div id="chain-steps-container" class="chain-steps-container"></div>
+
+            <div class="chain-footer-actions">
+                <div class="chain-footer-left">
+                    <button id="add-chain-step-btn" class="outline-btn mini-btn">+ Add Blank Step</button>
+                    <button id="import-current-as-step-btn" class="outline-btn mini-btn">📥 Import Current Request</button>
+                </div>
+                <button id="save-chain-btn" class="primary-btn mini-btn">Save Workflow</button>
+            </div>
         </div>
     </div>
 
