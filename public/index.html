@@ -276,30 +276,59 @@
 
     <div id="chains-modal" class="modal hidden">
         <div class="modal-content chains-modal-content">
-            <div class="modal-header">
+            <!-- Compact Header -->
+            <div class="modal-header chain-modal-header">
                 <div class="chain-header-title-wrap">
-                    <h2>Dynamic Request Workflows</h2>
-                    <span class="chain-subtitle-badge">Chaining & Assertions</span>
+                    <svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ff6c37" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                    <h2>Workflows</h2>
                 </div>
-                <div class="btn-group chain-header-actions">
-                    <button id="run-all-chain-btn" class="primary-btn mini-btn chain-run-btn">▶ Run Entire Chain</button>
-                    <button id="new-chain-btn" class="outline-btn mini-btn">+ New Workflow</button>
-                    <button class="close-modal-btn">Close</button>
+                <div class="chain-header-actions">
+                    <button id="run-all-chain-btn" class="primary-btn mini-btn chain-run-btn" title="Run workflow sequence">
+                        <svg class="ui-icon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        <span>Run</span>
+                    </button>
+                    <button id="toggle-workflow-settings-btn" class="outline-btn mini-btn" title="Workflow settings, auth, duplicate, delete">
+                        <svg class="ui-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                        <span class="btn-text-hide-mobile">Manage</span>
+                    </button>
+                    <button class="close-modal-btn icon-only-btn" title="Close modal">
+                        <svg class="ui-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
                 </div>
             </div>
 
-            <div class="chain-meta-bar">
+            <!-- Single Compact Row: Workflow Selector + New Workflow -->
+            <div class="chain-selector-bar">
                 <div class="chain-select-wrap">
-                    <label for="chain-select" class="chain-label">Active Workflow:</label>
-                    <select id="chain-select" class="chain-select"></select>
+                    <select id="chain-select" class="chain-select" title="Select workflow pipeline"></select>
                 </div>
-                <div class="btn-group chain-management-btns">
-                    <button id="duplicate-chain-btn" class="outline-btn mini-btn">Duplicate</button>
-                    <button id="rename-chain-btn" class="outline-btn mini-btn">Rename</button>
-                    <button id="delete-chain-btn" class="danger-btn mini-btn">Delete</button>
+                <button id="new-chain-btn" class="outline-btn mini-btn" title="Create new workflow">+ New</button>
+            </div>
+
+            <!-- Collapsible Workflow Settings Drawer (Toggled by Manage button) -->
+            <div class="workflow-settings-drawer hidden" id="workflow-settings-drawer">
+                <div class="workflow-drawer-inner">
+                    <div class="workflow-auth-wrap" id="workflow-auth-wrap">
+                        <label class="chain-label" title="All steps automatically inherit this auth unless overridden">Default Auth:</label>
+                        <select id="workflow-auth-type" class="chain-select-mini">
+                            <option value="none">None</option>
+                            <option value="bearer">Bearer Token</option>
+                            <option value="apikey">API Key</option>
+                            <option value="basic">Basic Auth</option>
+                        </select>
+                        <div id="workflow-auth-inputs" class="workflow-auth-inputs"></div>
+                    </div>
+                    <div class="chain-management-btns">
+                        <button id="save-chain-btn" class="outline-btn mini-btn" title="Save workflow changes">Save</button>
+                        <button id="duplicate-chain-btn" class="outline-btn mini-btn" title="Duplicate active workflow">Duplicate</button>
+                        <button id="rename-chain-btn" class="outline-btn mini-btn" title="Rename active workflow">Rename</button>
+                        <button id="reset-sample-chain-btn" class="outline-btn mini-btn" title="Restore default verified sample workflow">Restore Sample</button>
+                        <button id="delete-chain-btn" class="danger-btn mini-btn" title="Delete active workflow">Delete</button>
+                    </div>
                 </div>
             </div>
 
+            <!-- Ultra-slim Status & Variables Ticker Strip -->
             <div class="chain-ribbon" id="chain-ribbon">
                 <div class="chain-ribbon-left">
                     <span id="chain-status-pill" class="badge badge-default">Ready</span>
@@ -307,21 +336,47 @@
                     <span id="chain-steps-count-pill" class="badge badge-default">0 Steps</span>
                 </div>
                 <div class="chain-vars-preview" id="chain-vars-preview">
-                    <span class="chain-vars-label">Runtime Variables:</span>
+                    <span class="chain-vars-label">Vars:</span>
                     <div id="chain-vars-chips" class="chain-vars-chips">
-                        <span class="text-muted text-xs">Run workflow to populate variables</span>
+                        <span class="text-muted text-xs">Run to extract variables</span>
                     </div>
                 </div>
             </div>
 
-            <div id="chain-steps-container" class="chain-steps-container"></div>
+            <!-- Mobile View Navigation Switcher (Steps vs Inspector) -->
+            <div class="chain-mobile-view-nav" id="chain-mobile-view-nav">
+                <button class="chain-mobile-nav-btn active" id="mobile-nav-steps-btn" data-view="master">
+                    <svg class="ui-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                    <span>Steps</span>
+                    <span class="tab-badge-counter" id="mobile-steps-count-badge">0</span>
+                </button>
+                <button class="chain-mobile-nav-btn" id="mobile-nav-detail-btn" data-view="detail">
+                    <svg class="ui-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                    <span id="mobile-detail-nav-label">Step Inspector</span>
+                </button>
+            </div>
 
-            <div class="chain-footer-actions">
-                <div class="chain-footer-left">
-                    <button id="add-chain-step-btn" class="outline-btn mini-btn">+ Add Blank Step</button>
-                    <button id="import-current-as-step-btn" class="outline-btn mini-btn">📥 Import Current Request</button>
-                </div>
-                <button id="save-chain-btn" class="primary-btn mini-btn">Save Workflow</button>
+            <!-- Two-Pane Master-Detail Split Layout -->
+            <div class="chain-split-layout view-master" id="chain-split-layout">
+                <!-- Left Pane: Master Step Timeline / Sequence -->
+                <aside class="chain-master-pane">
+                    <div class="chain-master-top">
+                        <span class="chain-master-title">Steps Sequence</span>
+                        <div class="chain-master-actions">
+                            <button id="add-chain-step-btn" class="outline-btn mini-btn" title="Add blank step">+ Step</button>
+                            <button id="import-current-as-step-btn" class="outline-btn mini-btn" title="Import current request editor state">
+                                <svg class="ui-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                <span>Import</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="chain-master-list" class="chain-master-list"></div>
+                </aside>
+
+                <!-- Right Pane: Detail Inspector for Selected Step -->
+                <section class="chain-detail-pane" id="chain-detail-pane">
+                    <!-- Populated dynamically -->
+                </section>
             </div>
         </div>
     </div>

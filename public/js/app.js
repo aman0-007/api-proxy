@@ -564,14 +564,44 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // ----------------------------------------------------
-    // Dynamic Request Chaining & Workflows
+    // Dynamic Request Workflows (Master-Detail, Inherited Auth, Rule Chips, Var Autocomplete)
     // ----------------------------------------------------
     let activeChainId = StorageService.getChains()[0]?.id || 'chain_json_placeholder';
+    let selectedStepId = null;
+    let activeInspectorTab = 'request'; // 'request' | 'extracts' | 'assertions' | 'response'
     let lastWorkflowResults = {};
     let activeRuntimeContext = {};
-    let expandedStepIds = new Set(['step_fetch_user']);
-    const activeStepTabs = new Map();
     let isWorkflowRunning = false;
+
+    // Clean SVG Icons for Workflow UI (Consistent with application aesthetic)
+    const WorkflowIcons = {
+        play: `<svg class="ui-icon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>`,
+        spinner: `<svg class="ui-icon spinner-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg>`,
+        load: `<svg class="ui-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>`,
+        shield: `<svg class="ui-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
+        check: `<svg class="ui-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
+        cross: `<svg class="ui-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
+        clock: `<svg class="ui-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+        arrowRight: `<svg class="ui-icon chip-arrow" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>`,
+        chevronUp: `<svg class="ui-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>`,
+        chevronDown: `<svg class="ui-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`,
+        trash: `<svg class="ui-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`,
+        plus: `<svg class="ui-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
+        back: `<svg class="ui-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>`
+    };
+
+    // Mobile View switcher helper ('master' = Steps, 'detail' = Inspector)
+    const setMobileWorkflowView = (view) => {
+        const splitLayout = document.getElementById('chain-split-layout');
+        const masterBtn = document.getElementById('mobile-nav-steps-btn');
+        const detailBtn = document.getElementById('mobile-nav-detail-btn');
+        if (splitLayout) {
+            splitLayout.classList.remove('view-master', 'view-detail');
+            splitLayout.classList.add(view === 'detail' ? 'view-detail' : 'view-master');
+        }
+        if (masterBtn) masterBtn.classList.toggle('active', view === 'master');
+        if (detailBtn) detailBtn.classList.toggle('active', view === 'detail');
+    };
 
     const parseHeadersText = (text) => {
         const headers = {};
@@ -592,15 +622,128 @@ document.addEventListener('DOMContentLoaded', () => {
         return Object.entries(headersObj).map(([k, v]) => `${k}: ${v}`).join('\n');
     };
 
-    const renderWorkflowSelector = () => {
-        const chains = StorageService.getChains();
-        const select = document.getElementById('chain-select');
-        if (!select) return;
-        select.innerHTML = chains.map(c => `
-            <option value="${DOM.escapeHTML(c.id)}" ${c.id === activeChainId ? 'selected' : ''}>
-                ${DOM.escapeHTML(c.name)} (${(c.steps || []).length} steps)
-            </option>
-        `).join('');
+    // Helper: Collect available variables for autocomplete / insertion
+    const getAvailableVariables = (targetStepId = null) => {
+        const chain = StorageService.getChain(activeChainId);
+        const vars = [];
+        const seen = new Set();
+
+        // 1. Variables from earlier steps in active workflow
+        if (chain && Array.isArray(chain.steps)) {
+            for (const step of chain.steps) {
+                if (targetStepId && step.id === targetStepId) {
+                    break; // Only include variables extracted before this step
+                }
+                if (Array.isArray(step.extracts)) {
+                    step.extracts.forEach(ext => {
+                        const vName = (ext.variableName || '').trim();
+                        if (vName && !seen.has(vName)) {
+                            seen.add(vName);
+                            vars.push({
+                                name: vName,
+                                source: step.name ? `Step: ${step.name.slice(0, 16)}` : 'Workflow',
+                                type: 'workflow'
+                            });
+                        }
+                    });
+                }
+            }
+        }
+
+        // 2. Active runtime context variables (from live execution)
+        Object.keys(activeRuntimeContext).forEach(k => {
+            if (!seen.has(k)) {
+                seen.add(k);
+                vars.push({
+                    name: k,
+                    source: 'Runtime',
+                    type: 'runtime'
+                });
+            }
+        });
+
+        // 3. Environment profile variables
+        const activeEnv = StorageService.getActiveEnv() || {};
+        Object.keys(activeEnv).forEach(k => {
+            if (!seen.has(k)) {
+                seen.add(k);
+                vars.push({
+                    name: k,
+                    source: 'Active Env',
+                    type: 'env'
+                });
+            }
+        });
+
+        return vars;
+    };
+
+    // Helper: Insert variable at input cursor position
+    const insertVariableAtCursor = (inputEl, varName) => {
+        if (!inputEl) return;
+        const insertion = `{{${varName}}}`;
+        const start = inputEl.selectionStart ?? inputEl.value.length;
+        const end = inputEl.selectionEnd ?? inputEl.value.length;
+        const val = inputEl.value;
+
+        // Check if user was already typing `{{` right before cursor
+        let textBefore = val.substring(0, start);
+        if (textBefore.endsWith('{{')) {
+            textBefore = textBefore.slice(0, -2);
+        }
+
+        inputEl.value = textBefore + insertion + val.substring(end);
+        inputEl.selectionStart = inputEl.selectionEnd = textBefore.length + insertion.length;
+        inputEl.focus();
+        inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+
+    // Helper: Show variable autocomplete menu at target element
+    const showVariableAutocomplete = (targetInput, anchorEl = null) => {
+        document.querySelectorAll('.var-autocomplete-menu').forEach(el => el.remove());
+
+        const vars = getAvailableVariables(selectedStepId);
+        if (vars.length === 0) {
+            Toast.show("No variables defined yet. Define extracts in prior steps or set environment variables.", "info");
+            return;
+        }
+
+        const menu = document.createElement('div');
+        menu.className = 'var-autocomplete-menu';
+
+        menu.innerHTML = `
+            <div class="var-autocomplete-header">Available Variables (Click to Insert)</div>
+            ${vars.map(v => `
+                <div class="var-autocomplete-item" data-var="${DOM.escapeHTML(v.name)}">
+                    <span>{{${DOM.escapeHTML(v.name)}}}</span>
+                    <span class="var-source-badge">${DOM.escapeHTML(v.source)}</span>
+                </div>
+            `).join('')}
+        `;
+
+        const ref = anchorEl || targetInput;
+        const rect = ref.getBoundingClientRect();
+        menu.style.position = 'fixed';
+        menu.style.left = `${Math.max(10, Math.min(window.innerWidth - 270, rect.left))}px`;
+        menu.style.top = `${rect.bottom + 4}px`;
+
+        menu.addEventListener('click', (e) => {
+            const item = e.target.closest('.var-autocomplete-item');
+            if (!item) return;
+            const varName = item.dataset.var;
+            insertVariableAtCursor(targetInput, varName);
+            menu.remove();
+        });
+
+        document.body.appendChild(menu);
+
+        const closeHandler = (e) => {
+            if (!menu.contains(e.target) && e.target !== ref) {
+                menu.remove();
+                document.removeEventListener('pointerdown', closeHandler);
+            }
+        };
+        setTimeout(() => document.addEventListener('pointerdown', closeHandler), 50);
     };
 
     const updateRibbonUI = (status = 'Ready', duration = '0ms', stepsCount = 0) => {
@@ -621,6 +764,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (durationPill) durationPill.textContent = duration;
         if (countPill) countPill.textContent = `${stepsCount} Steps`;
+        const mobileStepsBadge = document.getElementById('mobile-steps-count-badge');
+        if (mobileStepsBadge) mobileStepsBadge.textContent = String(stepsCount);
 
         if (chipsContainer) {
             const keys = Object.keys(activeRuntimeContext);
@@ -628,633 +773,1019 @@ document.addEventListener('DOMContentLoaded', () => {
                 chipsContainer.innerHTML = `<span class="text-muted text-xs">Run workflow to extract & populate dynamic variables</span>`;
             } else {
                 chipsContainer.innerHTML = keys.map(k => `
-                    <span class="chain-var-chip" title="Value: ${DOM.escapeHTML(String(activeRuntimeContext[k]))}">
-                        <strong>{{${DOM.escapeHTML(k)}}}:</strong> ${DOM.escapeHTML(String(activeRuntimeContext[k]).slice(0, 20))}
+                    <span class="chain-var-chip" title="Click to copy: {{${DOM.escapeHTML(k)}}}" data-var-name="${DOM.escapeHTML(k)}">
+                        <strong>{{${DOM.escapeHTML(k)}}}:</strong> ${DOM.escapeHTML(String(activeRuntimeContext[k]).slice(0, 18))}
                     </span>
                 `).join('');
+                chipsContainer.querySelectorAll('.chain-var-chip').forEach(chip => {
+                    chip.addEventListener('click', () => {
+                        const vn = chip.dataset.varName;
+                        navigator.clipboard?.writeText(`{{${vn}}}`);
+                        Toast.show(`Copied {{${vn}}} to clipboard`);
+                    });
+                });
             }
         }
     };
 
-    const renderActiveWorkflow = () => {
+    // Update Workflow selector and Workflow-level Auth inputs
+    const renderWorkflowMetaAndAuth = () => {
+        const chains = StorageService.getChains();
+        const select = document.getElementById('chain-select');
+        if (select) {
+            select.innerHTML = chains.map(c => `
+                <option value="${DOM.escapeHTML(c.id)}" ${c.id === activeChainId ? 'selected' : ''}>
+                    ${DOM.escapeHTML(c.name)} (${(c.steps || []).length} steps)
+                </option>
+            `).join('');
+        }
+
         const chain = StorageService.getChain(activeChainId);
         if (!chain) return;
 
-        const container = document.getElementById('chain-steps-container');
-        if (!container) return;
+        // Ensure chain auth defaults exist
+        if (!chain.auth) {
+            chain.auth = { type: 'none', token: '', prefix: 'Bearer', user: '', pass: '', keyName: '', keyValue: '', keyAddTo: 'header' };
+        }
+
+        const authSelect = document.getElementById('workflow-auth-type');
+        const authInputs = document.getElementById('workflow-auth-inputs');
+
+        if (authSelect) authSelect.value = chain.auth.type || 'none';
+
+        if (authInputs) {
+            const authType = chain.auth.type || 'none';
+            if (authType === 'bearer') {
+                authInputs.innerHTML = `
+                    <input type="text" id="wf-auth-token" class="workflow-auth-input" placeholder="Token or {{token}}" value="${DOM.escapeHTML(chain.auth.token || '')}" title="Workflow Bearer Token">
+                `;
+            } else if (authType === 'apikey') {
+                authInputs.innerHTML = `
+                    <input type="text" id="wf-auth-keyname" class="workflow-auth-input" style="max-width:105px;" placeholder="Key Name" value="${DOM.escapeHTML(chain.auth.keyName || '')}">
+                    <input type="text" id="wf-auth-keyval" class="workflow-auth-input" style="max-width:125px;" placeholder="Key Value" value="${DOM.escapeHTML(chain.auth.keyValue || '')}">
+                `;
+            } else if (authType === 'basic') {
+                authInputs.innerHTML = `
+                    <input type="text" id="wf-auth-user" class="workflow-auth-input" style="max-width:95px;" placeholder="Username" value="${DOM.escapeHTML(chain.auth.user || '')}">
+                    <input type="password" id="wf-auth-pass" class="workflow-auth-input" style="max-width:95px;" placeholder="Password" value="${DOM.escapeHTML(chain.auth.pass || '')}">
+                `;
+            } else {
+                authInputs.innerHTML = ``;
+            }
+
+            // Sync auth inputs to chain
+            authInputs.querySelectorAll('input').forEach(inp => {
+                inp.addEventListener('input', () => {
+                    if (inp.id === 'wf-auth-token') chain.auth.token = inp.value;
+                    if (inp.id === 'wf-auth-keyname') chain.auth.keyName = inp.value;
+                    if (inp.id === 'wf-auth-keyval') chain.auth.keyValue = inp.value;
+                    if (inp.id === 'wf-auth-user') chain.auth.user = inp.value;
+                    if (inp.id === 'wf-auth-pass') chain.auth.pass = inp.value;
+                    StorageService.saveChain(chain);
+                    const tagEl = document.querySelector('.step-auth-inherited-tag');
+                    if (tagEl) {
+                        tagEl.innerHTML = `${WorkflowIcons.shield} <span>Inheriting Workflow Auth (${(chain.auth.type || 'NONE').toUpperCase()})</span>`;
+                    }
+                });
+            });
+        }
+    };
+
+    // Render Master Step List (Left Pane)
+    const renderMasterList = () => {
+        const chain = StorageService.getChain(activeChainId);
+        const list = document.getElementById('chain-master-list');
+        if (!chain || !list) return;
 
         const steps = chain.steps || [];
-        updateRibbonUI(
-            isWorkflowRunning ? 'Running...' : (Object.keys(lastWorkflowResults).length ? (steps.every(s => lastWorkflowResults[s.id]?.passed) ? 'Passed' : 'Completed with issues') : 'Ready'),
-            '0ms',
-            steps.length
-        );
+
+        // Ensure selectedStepId is valid
+        if (!steps.some(s => s.id === selectedStepId)) {
+            selectedStepId = steps[0]?.id || null;
+        }
 
         if (steps.length === 0) {
-            container.innerHTML = `
-                <div style="text-align:center; padding: 40px 20px; background: #121318; border: 1px dashed #2e303d; border-radius: 8px;">
-                    <p class="text-muted mb-10">This workflow currently has no steps.</p>
-                    <button id="add-first-step-btn" class="primary-btn mini-btn">+ Add First Step</button>
+            list.innerHTML = `
+                <div style="text-align:center; padding: 30px 10px; color: #7b8098; font-size: 12px;">
+                    <p style="margin-bottom: 8px;">No steps in workflow.</p>
+                    <button class="primary-btn mini-btn" id="master-add-step-btn">+ Add Step</button>
                 </div>
             `;
-            const addFirstBtn = container.querySelector('#add-first-step-btn');
-            if (addFirstBtn) {
-                addFirstBtn.onclick = () => {
-                    document.getElementById('add-chain-step-btn')?.click();
-                };
-            }
+            list.querySelector('#master-add-step-btn')?.addEventListener('click', () => {
+                document.getElementById('add-chain-step-btn')?.click();
+            });
             return;
         }
 
-        container.innerHTML = steps.map((step, idx) => {
-            const isExpanded = expandedStepIds.has(step.id);
-            const stepResult = lastWorkflowResults[step.id];
-            let statusClass = 'idle';
-            let statusLabel = 'Idle';
-            let cardClass = '';
+        list.innerHTML = steps.map((step, idx) => {
+            const isSelected = step.id === selectedStepId;
+            const res = lastWorkflowResults[step.id];
+            let statusText = 'Ready';
+            let statusClass = 'ready';
 
-            if (stepResult) {
-                if (stepResult.running) {
-                    statusClass = 'running';
-                    statusLabel = 'Running...';
-                    cardClass = 'is-running';
-                } else if (stepResult.passed) {
-                    statusClass = 'passed';
-                    statusLabel = `${stepResult.status || 200} OK (${stepResult.duration}ms)`;
-                    cardClass = 'is-passed';
-                } else {
-                    statusClass = 'failed';
-                    statusLabel = `Failed (${stepResult.status || 'Err'})`;
-                    cardClass = 'is-failed';
-                }
+            if (res) {
+                statusClass = res.passed ? 'passed' : 'failed';
+                statusText = res.passed ? `${res.status || '200'} (${res.duration}ms)` : `Fail (${res.status || 'Err'})`;
             }
 
-            const methodClr = DOM.getMethodColor(step.method || 'GET');
-            const extCount = (step.extracts || []).length;
-            const assCount = (step.assertions || []).length;
-            const activeTab = activeStepTabs.get(step.id) || 'request';
+            // Remove duplicated leading number if step name already starts with "1. " or "2. "
+            const rawName = step.name || 'Untitled';
+            const displayName = rawName.replace(/^\d+\.\s*/, '');
 
             return `
-                <div class="chain-step-card ${cardClass}" data-step-id="${DOM.escapeHTML(step.id)}">
-                    <div class="step-card-header">
-                        <div class="step-header-left">
-                            <div class="step-order-btns">
-                                <button class="step-arrow-btn step-move-up" title="Move Step Up" ${idx === 0 ? 'disabled style="opacity:0.3;"' : ''}>▲</button>
-                                <button class="step-arrow-btn step-move-down" title="Move Step Down" ${idx === steps.length - 1 ? 'disabled style="opacity:0.3;"' : ''}>▼</button>
-                            </div>
-                            <input type="checkbox" class="step-checkbox" title="Enable/Disable step" ${step.enabled !== false ? 'checked' : ''} />
-                            <span class="step-index-badge">#${idx + 1}</span>
-                            <span class="hist-method ${methodClr}" style="font-size:11px; padding:2px 6px;">${DOM.escapeHTML(step.method || 'GET')}</span>
-                            <input type="text" class="step-name-input" value="${DOM.escapeHTML(step.name || `Step ${idx + 1}`)}" placeholder="Step Name" />
-                            <span class="step-url-preview" title="${DOM.escapeHTML(step.url || '')}">${DOM.escapeHTML(step.url || 'No URL')}</span>
-                        </div>
-                        <div class="step-header-right">
-                            <span class="step-status-chip ${statusClass}">${statusLabel}</span>
-                            <button type="button" class="outline-btn mini-btn step-run-btn" title="Execute this single step">▶ Run</button>
-                            <button type="button" class="outline-btn mini-btn step-load-btn" title="Load this step into the main Request Editor">📥 Load</button>
-                            <button type="button" class="delete-btn step-delete-btn" title="Delete Step">×</button>
-                            <button type="button" class="step-expand-toggle-btn" title="${isExpanded ? 'Collapse step' : 'Expand step'}" aria-expanded="${isExpanded}">
-                                <span class="chevron-toggle">${isExpanded ? '▲' : '▼'}</span>
-                            </button>
+                <div class="chain-master-item ${isSelected ? 'is-selected' : ''} ${res ? (res.passed ? 'is-passed' : 'is-failed') : ''}" data-step-id="${DOM.escapeHTML(step.id)}">
+                    <div class="step-reorder-col">
+                        <button class="step-reorder-btn step-move-up" data-step-id="${DOM.escapeHTML(step.id)}" title="Move Up" ${idx === 0 ? 'disabled' : ''}>${WorkflowIcons.chevronUp}</button>
+                        <button class="step-reorder-btn step-move-down" data-step-id="${DOM.escapeHTML(step.id)}" title="Move Down" ${idx === steps.length - 1 ? 'disabled' : ''}>${WorkflowIcons.chevronDown}</button>
+                    </div>
+                    <span class="step-index-num">${idx + 1}.</span>
+                    <input type="checkbox" class="step-checkbox master-step-checkbox" data-step-id="${DOM.escapeHTML(step.id)}" ${step.enabled !== false ? 'checked' : ''} title="Enable/Disable Step">
+                    <div class="step-item-meta">
+                        <div class="step-item-top">
+                            <span class="step-method-badge ${DOM.getMethodColor(step.method)}">${DOM.escapeHTML(step.method || 'GET')}</span>
+                            <span class="step-item-name" title="${DOM.escapeHTML(rawName)}">${DOM.escapeHTML(displayName)}</span>
                         </div>
                     </div>
-
-                    <div class="step-card-body ${isExpanded ? '' : 'hidden'}">
-                        <div class="step-tabs-bar">
-                            <button type="button" class="step-tab-btn ${activeTab === 'request' ? 'active' : ''}" data-step-tab="request">Request</button>
-                            <button type="button" class="step-tab-btn ${activeTab === 'extract' ? 'active' : ''}" data-step-tab="extract">Extract Variables (${extCount})</button>
-                            <button type="button" class="step-tab-btn ${activeTab === 'assertions' ? 'active' : ''}" data-step-tab="assertions">Assertions (${assCount})</button>
-                            <button type="button" class="step-tab-btn ${activeTab === 'response' ? 'active' : ''}" data-step-tab="response">Last Response ${stepResult ? '●' : ''}</button>
-                        </div>
-
-                        <!-- Subtab: Request -->
-                        <div class="step-tab-panel step-tab-request ${activeTab === 'request' ? '' : 'hidden'}">
-                            <div class="step-form-row">
-                                <select class="step-method-select">
-                                    ${['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD'].map(m => `
-                                        <option value="${m}" ${step.method === m ? 'selected' : ''}>${m}</option>
-                                    `).join('')}
-                                </select>
-                                <input type="text" class="step-url-input" placeholder="https://api.example.com/item/{{id}}" value="${DOM.escapeHTML(step.url || '')}" />
-                            </div>
-
-                            <div style="display:flex; flex-direction:column; gap:4px;">
-                                <label style="font-size:11px; color:#8c90a4; font-weight:600;">Headers (Name: Value per line):</label>
-                                <textarea class="step-textarea step-headers-textarea" placeholder="Content-Type: application/json&#10;Authorization: Bearer {{token}}">${DOM.escapeHTML(stringifyHeaders(step.headers))}</textarea>
-                            </div>
-
-                            <div style="display:flex; flex-direction:column; gap:4px;">
-                                <div style="display:flex; justify-content:space-between; align-items:center;">
-                                    <label style="font-size:11px; color:#8c90a4; font-weight:600;">Request Body (${step.bodyFormat || 'json'}):</label>
-                                    <select class="rule-select step-bodyformat-select" style="padding:2px 6px; font-size:11px;">
-                                        <option value="none" ${step.bodyFormat === 'none' ? 'selected' : ''}>none</option>
-                                        <option value="json" ${step.bodyFormat === 'json' || !step.bodyFormat ? 'selected' : ''}>json</option>
-                                        <option value="text" ${step.bodyFormat === 'text' ? 'selected' : ''}>text</option>
-                                        <option value="urlencoded" ${step.bodyFormat === 'urlencoded' ? 'selected' : ''}>urlencoded</option>
-                                    </select>
-                                </div>
-                                <textarea class="step-textarea step-body-textarea" placeholder='{"userId": "{{userId}}", "action": "test"}'>${DOM.escapeHTML(step.body || '')}</textarea>
-                            </div>
-                        </div>
-
-                        <!-- Subtab: Variables Extraction -->
-                        <div class="step-tab-panel step-tab-extract ${activeTab === 'extract' ? '' : 'hidden'}">
-                            <p class="text-muted text-xs">Extract values from this step's response to supply subsequent steps via {{variableName}} or write to environment.</p>
-                            <div class="step-extract-list" style="display:flex; flex-direction:column; gap:6px;">
-                                ${(step.extracts || []).map((ext, extIdx) => `
-                                    <div class="rule-row" data-ext-idx="${extIdx}">
-                                        <select class="rule-select rule-ext-target">
-                                            <option value="body_json" ${ext.target === 'body_json' ? 'selected' : ''}>JSON Body</option>
-                                            <option value="header" ${ext.target === 'header' ? 'selected' : ''}>Header</option>
-                                            <option value="status" ${ext.target === 'status' ? 'selected' : ''}>Status Code</option>
-                                        </select>
-                                        <input type="text" class="rule-input rule-ext-source" placeholder="${ext.target === 'header' ? 'Header-Name' : (ext.target === 'status' ? 'N/A' : 'Path (e.g. data.token or [0].id)')}" value="${DOM.escapeHTML(ext.sourcePath || '')}" />
-                                        <span style="color:#8c90a4; font-size:11px;">➔</span>
-                                        <input type="text" class="rule-input rule-ext-var" placeholder="Variable Name (e.g. authToken)" value="${DOM.escapeHTML(ext.variableName || '')}" />
-                                        <label class="rule-checkbox-label">
-                                            <input type="checkbox" class="rule-ext-env" ${ext.saveToEnv ? 'checked' : ''} /> Save to Env
-                                        </label>
-                                        <button type="button" class="delete-btn rule-remove-ext-btn">×</button>
-                                    </div>
-                                `).join('')}
-                            </div>
-                            <button type="button" class="outline-btn mini-btn step-add-ext-btn" style="align-self:flex-start; margin-top:4px;">+ Add Extraction Rule</button>
-                        </div>
-
-                        <!-- Subtab: Assertions -->
-                        <div class="step-tab-panel step-tab-assertions ${activeTab === 'assertions' ? '' : 'hidden'}">
-                            <p class="text-muted text-xs">Test assertions validate this step's response. The workflow halts if an assertion fails.</p>
-                            <div class="step-assert-list" style="display:flex; flex-direction:column; gap:6px;">
-                                ${(step.assertions || []).map((a, aIdx) => `
-                                    <div class="rule-row" data-ass-idx="${aIdx}">
-                                        <select class="rule-select rule-ass-type">
-                                            <option value="status_equals" ${a.type === 'status_equals' ? 'selected' : ''}>Status Equals</option>
-                                            <option value="response_time_lt" ${a.type === 'response_time_lt' ? 'selected' : ''}>Response Time &lt; (ms)</option>
-                                            <option value="body_contains" ${a.type === 'body_contains' ? 'selected' : ''}>Body Contains</option>
-                                            <option value="json_path_exists" ${a.type === 'json_path_exists' ? 'selected' : ''}>JSON Path Exists</option>
-                                            <option value="json_path_equals" ${a.type === 'json_path_equals' ? 'selected' : ''}>JSON Path Equals</option>
-                                        </select>
-                                        <input type="text" class="rule-input rule-ass-path ${['json_path_exists', 'json_path_equals'].includes(a.type) ? '' : 'hidden'}" placeholder="JSON Path e.g. token or user.id" value="${DOM.escapeHTML(a.path || '')}" />
-                                        <input type="text" class="rule-input rule-ass-val" placeholder="Expected Value (e.g. 200, 2000)" value="${DOM.escapeHTML(a.value || '')}" />
-                                        <button type="button" class="delete-btn rule-remove-ass-btn">×</button>
-                                    </div>
-                                `).join('')}
-                            </div>
-                            <button type="button" class="outline-btn mini-btn step-add-ass-btn" style="align-self:flex-start; margin-top:4px;">+ Add Assertion</button>
-                        </div>
-
-                        <!-- Subtab: Last Response -->
-                        <div class="step-tab-panel step-tab-response ${activeTab === 'response' ? '' : 'hidden'}">
-                            ${stepResult ? `
-                                <div class="step-result-box">
-                                    <div class="step-result-status-row">
-                                        <div style="display:flex; gap:6px; align-items:center;">
-                                            <span class="badge ${stepResult.status >= 200 && stepResult.status < 400 ? 'status-green' : 'status-red'}">${stepResult.status || 0} ${DOM.escapeHTML(stepResult.statusText || '')}</span>
-                                            <span class="badge badge-default">${stepResult.duration}ms</span>
-                                        </div>
-                                        <div style="display:flex; gap:6px;">
-                                            ${Object.entries(stepResult.extracted || {}).map(([k, v]) => `
-                                                <span class="chain-var-chip" title="Extracted {{${k}}} = ${DOM.escapeHTML(String(v))}">
-                                                    <strong>Extracted {{${DOM.escapeHTML(k)}}}:</strong> ${DOM.escapeHTML(String(v).slice(0, 15))}
-                                                </span>
-                                            `).join('')}
-                                        </div>
-                                    </div>
-
-                                    ${stepResult.assertions && stepResult.assertions.length > 0 ? `
-                                        <div class="step-result-assertions">
-                                            <label style="font-size:11px; color:#8c90a4; font-weight:600;">Assertions Check:</label>
-                                            ${stepResult.assertions.map(ass => `
-                                                <div class="assertion-item ${ass.passed ? 'passed' : 'failed'}">
-                                                    <span>${ass.passed ? '✓' : '✗'}</span>
-                                                    <span>${DOM.escapeHTML(ass.message)}</span>
-                                                </div>
-                                            `).join('')}
-                                        </div>
-                                    ` : ''}
-
-                                    <div style="display:flex; flex-direction:column; gap:4px; margin-top:4px;">
-                                        <label style="font-size:11px; color:#8c90a4; font-weight:600;">Response Payload Preview:</label>
-                                        <pre class="step-result-pre"><code>${DOM.escapeHTML(FormatterService.formatOutput(stepResult.data, 'json'))}</code></pre>
-                                    </div>
-                                </div>
-                            ` : `
-                                <p class="text-muted text-xs" style="text-align:center; padding:20px;">
-                                    This step has not been executed in the current session yet. Click "▶ Run" to execute and inspect live output.
-                                </p>
-                            `}
-                        </div>
-                    </div>
+                    <span class="step-item-status-pill ${statusClass}">${statusText}</span>
+                    <button class="step-reorder-btn master-delete-step-btn" data-step-id="${DOM.escapeHTML(step.id)}" title="Delete Step">${WorkflowIcons.cross}</button>
                 </div>
             `;
         }).join('');
     };
 
-    // Scrape modified step fields from card back to chain object
-    const scrapeCardToStep = (card, step) => {
-        if (!card || !step) return;
-        const nameInput = card.querySelector('.step-name-input');
-        if (nameInput) step.name = nameInput.value.trim();
-
-        const methodSelect = card.querySelector('.step-method-select');
-        if (methodSelect) step.method = methodSelect.value;
-
-        const urlInput = card.querySelector('.step-url-input');
-        if (urlInput) step.url = urlInput.value.trim();
-
-        const headersTextarea = card.querySelector('.step-headers-textarea');
-        if (headersTextarea) step.headers = parseHeadersText(headersTextarea.value);
-
-        const bodyformatSelect = card.querySelector('.step-bodyformat-select');
-        if (bodyformatSelect) step.bodyFormat = bodyformatSelect.value;
-
-        const bodyTextarea = card.querySelector('.step-body-textarea');
-        if (bodyTextarea) step.body = bodyTextarea.value;
-
-        const enabledCheckbox = card.querySelector('.step-checkbox');
-        if (enabledCheckbox) step.enabled = enabledCheckbox.checked;
-
-        // Scrape extracts
-        const extRows = card.querySelectorAll('.rule-row[data-ext-idx]');
-        step.extracts = Array.from(extRows).map((row, i) => ({
-            id: 'ext_' + i,
-            target: row.querySelector('.rule-ext-target')?.value || 'body_json',
-            sourcePath: row.querySelector('.rule-ext-source')?.value?.trim() || '',
-            variableName: row.querySelector('.rule-ext-var')?.value?.trim() || '',
-            saveToEnv: !!row.querySelector('.rule-ext-env')?.checked
-        }));
-
-        // Scrape assertions
-        const assRows = card.querySelectorAll('.rule-row[data-ass-idx]');
-        step.assertions = Array.from(assRows).map((row, i) => ({
-            id: 'ass_' + i,
-            type: row.querySelector('.rule-ass-type')?.value || 'status_equals',
-            path: row.querySelector('.rule-ass-path')?.value?.trim() || '',
-            value: row.querySelector('.rule-ass-val')?.value?.trim() || ''
-        }));
-    };
-
-    const syncAllCardsToChain = () => {
+    // Render Detail Inspector (Right Pane)
+    const renderDetailPane = (stepId) => {
         const chain = StorageService.getChain(activeChainId);
-        if (!chain || !chain.steps) return;
-        const container = document.getElementById('chain-steps-container');
-        if (!container) return;
+        const detailPane = document.getElementById('chain-detail-pane');
+        if (!chain || !detailPane) return;
 
-        container.querySelectorAll('.chain-step-card').forEach(card => {
-            const stepId = card.dataset.stepId;
-            const step = chain.steps.find(s => s.id === stepId);
-            if (step) scrapeCardToStep(card, step);
-        });
-        StorageService.saveChain(chain);
+        const step = (chain.steps || []).find(s => s.id === stepId);
+        if (!step) {
+            detailPane.innerHTML = `
+                <div style="text-align:center; padding: 60px 20px; color: #7b8098;">
+                    <p style="font-size: 13px; margin-bottom: 12px;">Select a step on the left to configure its request parameters, extractions, and assertions.</p>
+                </div>
+            `;
+            return;
+        }
+
+        const res = lastWorkflowResults[step.id];
+        const stepIndex = chain.steps.findIndex(s => s.id === step.id) + 1;
+        const extractsCount = (step.extracts || []).length;
+        const assertionsCount = (step.assertions || []).length;
+
+        // Clean display name
+        const rawName = step.name || '';
+        const displayName = rawName.replace(/^\d+\.\s*/, '');
+
+        // Workflow Auth inheritance status
+        const isInheritingAuth = !step.authType || step.authType === 'inherit';
+        const wfAuthType = chain.auth?.type || 'none';
+
+        detailPane.innerHTML = `
+            <!-- Top Step Header -->
+            <div class="step-detail-header">
+                <div class="step-detail-title-wrap">
+                    <button type="button" class="outline-btn mini-btn mobile-back-to-steps-btn" id="mobile-back-to-steps-btn" title="Back to steps sequence">
+                        ${WorkflowIcons.back}
+                        <span>Steps</span>
+                    </button>
+                    <span class="step-index-badge">#${stepIndex}</span>
+                    <input type="text" class="step-detail-name-input" id="step-name-input" value="${DOM.escapeHTML(displayName)}" placeholder="Step name">
+                </div>
+                <div class="step-detail-actions">
+                    <button class="primary-btn mini-btn" id="detail-run-step-btn" title="Run this step sequentially">${WorkflowIcons.play} <span class="btn-text-hide-mobile">Run</span></button>
+                    <button class="outline-btn mini-btn" id="detail-load-step-btn" title="Load step into main Request Editor">${WorkflowIcons.load} <span class="btn-text-hide-mobile">Editor</span></button>
+                    <button class="danger-btn mini-btn icon-only-btn" id="detail-delete-step-btn" title="Delete this step">${WorkflowIcons.trash}</button>
+                </div>
+            </div>
+
+            <!-- URL and Method Bar -->
+            <div class="step-detail-url-bar">
+                <select class="step-detail-method-select" id="step-method-select">
+                    ${['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD'].map(m => `
+                        <option value="${m}" ${step.method === m ? 'selected' : ''}>${m}</option>
+                    `).join('')}
+                </select>
+                <div class="step-detail-url-wrap">
+                    <input type="text" class="step-detail-url-input" id="step-url-input" value="${DOM.escapeHTML(step.url || '')}" placeholder="https://api.example.com/items/{{id}}">
+                    <button type="button" class="var-helper-btn" id="step-url-var-btn" title="Insert variable placeholder">{x}</button>
+                </div>
+            </div>
+
+            <!-- Inspector Tab Bar -->
+            <div class="step-inspector-tabs">
+                <button class="step-inspector-tab ${activeInspectorTab === 'request' ? 'active' : ''}" data-tab="request">
+                    Request Config
+                </button>
+                <button class="step-inspector-tab ${activeInspectorTab === 'extracts' ? 'active' : ''}" data-tab="extracts">
+                    Extracts <span class="tab-badge-counter">${extractsCount}</span>
+                </button>
+                <button class="step-inspector-tab ${activeInspectorTab === 'assertions' ? 'active' : ''}" data-tab="assertions">
+                    Assertions <span class="tab-badge-counter">${assertionsCount}</span>
+                </button>
+                <button class="step-inspector-tab ${activeInspectorTab === 'response' ? 'active' : ''}" data-tab="response">
+                    Response ${res ? (res.passed ? WorkflowIcons.check : WorkflowIcons.cross) : ''}
+                </button>
+            </div>
+
+            <!-- Tab 1: Request Configuration -->
+            <div class="step-inspector-panel" id="panel-request" style="display: ${activeInspectorTab === 'request' ? 'flex' : 'none'};">
+                <!-- Inherited Workflow Auth or Override Box -->
+                <div class="step-auth-box">
+                    <div class="step-auth-header">
+                        <span class="chain-label">Authentication</span>
+                        <label class="step-auth-override-toggle">
+                            <input type="checkbox" id="step-auth-override-chk" ${!isInheritingAuth ? 'checked' : ''}>
+                            <span>Override workflow auth for this step</span>
+                        </label>
+                    </div>
+                    ${isInheritingAuth ? `
+                        <div>
+                            <span class="step-auth-inherited-tag">
+                                ${WorkflowIcons.shield} <span>Inheriting Workflow Auth (${wfAuthType.toUpperCase()})</span>
+                            </span>
+                            <span class="text-muted text-xs" style="margin-left: 8px;">
+                                Configured in default auth bar above
+                            </span>
+                        </div>
+                    ` : `
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 4px;">
+                            <select id="step-custom-authtype" class="chain-select-mini">
+                                <option value="none" ${step.authType === 'none' ? 'selected' : ''}>None</option>
+                                <option value="bearer" ${step.authType === 'bearer' ? 'selected' : ''}>Bearer Token</option>
+                                <option value="apikey" ${step.authType === 'apikey' ? 'selected' : ''}>API Key</option>
+                                <option value="basic" ${step.authType === 'basic' ? 'selected' : ''}>Basic Auth</option>
+                            </select>
+                            <div id="step-custom-auth-fields" style="display: flex; gap: 6px; flex: 1; flex-wrap: wrap;">
+                                ${step.authType === 'bearer' ? `
+                                    <input type="text" id="step-auth-token-inp" class="rule-input-mini" placeholder="Token or {{token}}" value="${DOM.escapeHTML(step.authToken || '')}">
+                                ` : (step.authType === 'apikey' ? `
+                                    <input type="text" id="step-auth-keyname-inp" class="rule-input-mini" placeholder="Key Name" value="${DOM.escapeHTML(step.apiKeyName || '')}">
+                                    <input type="text" id="step-auth-keyval-inp" class="rule-input-mini" placeholder="Key Value" value="${DOM.escapeHTML(step.apiKeyValue || '')}">
+                                ` : (step.authType === 'basic' ? `
+                                    <input type="text" id="step-auth-user-inp" class="rule-input-mini" placeholder="Username" value="${DOM.escapeHTML(step.authUser || '')}">
+                                    <input type="password" id="step-auth-pass-inp" class="rule-input-mini" placeholder="Password" value="${DOM.escapeHTML(step.authPass || '')}">
+                                ` : ''))}
+                            </div>
+                        </div>
+                    `}
+                </div>
+
+                <!-- Headers Section -->
+                <div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                        <span class="chain-label">Headers (One per line, e.g. Content-Type: application/json)</span>
+                        <button type="button" class="var-helper-btn" id="step-headers-var-btn">{x} Insert Var</button>
+                    </div>
+                    <textarea id="step-headers-textarea" class="step-textarea" style="min-height: 65px;" placeholder="Header-Name: header_value or {{variable}}">${DOM.escapeHTML(stringifyHeaders(step.headers))}</textarea>
+                </div>
+
+                <!-- Body Section -->
+                <div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span class="chain-label">Body:</span>
+                            <select id="step-bodyformat-select" class="chain-select-mini">
+                                <option value="none" ${(!step.bodyFormat || step.bodyFormat === 'none') ? 'selected' : ''}>none</option>
+                                <option value="json" ${step.bodyFormat === 'json' ? 'selected' : ''}>JSON</option>
+                                <option value="text" ${step.bodyFormat === 'text' ? 'selected' : ''}>Text</option>
+                                <option value="urlencoded" ${step.bodyFormat === 'urlencoded' ? 'selected' : ''}>URL Encoded</option>
+                            </select>
+                        </div>
+                        <button type="button" class="var-helper-btn" id="step-body-var-btn">{x} Insert Var</button>
+                    </div>
+                    <textarea id="step-body-textarea" class="step-textarea" style="min-height: 90px;" placeholder="Request body payload with dynamic {{variables}}">${DOM.escapeHTML(step.body || '')}</textarea>
+                </div>
+            </div>
+
+            <!-- Tab 2: Compact Extractions -->
+            <div class="step-inspector-panel" id="panel-extracts" style="display: ${activeInspectorTab === 'extracts' ? 'flex' : 'none'};">
+                <div class="rule-chips-section">
+                    <div class="rule-chips-header">
+                        <span class="rule-chips-title">Active Extracts (${extractsCount})</span>
+                        <span class="text-muted text-xs">Captures response data into variables for downstream steps</span>
+                    </div>
+                    <div class="rule-chips-wrap" id="detail-extracts-chips">
+                        ${extractsCount === 0 ? `<span class="text-muted text-xs">No extraction rules yet. Add one below.</span>` : ''}
+                        ${(step.extracts || []).map((ext, i) => `
+                            <div class="rule-chip">
+                                <span>${ext.target === 'status' ? 'Status Code' : (ext.target === 'header' ? `Header <b>${DOM.escapeHTML(ext.sourcePath)}</b>` : `JSON <b>${DOM.escapeHTML(ext.sourcePath || 'body')}</b>`)}</span>
+                                <span class="chip-arrow">${WorkflowIcons.arrowRight}</span>
+                                <code>{{${DOM.escapeHTML(ext.variableName)}}}</code>
+                                ${ext.saveToEnv ? `<span class="rule-chip-env">ENV</span>` : ''}
+                                <button class="chip-remove-btn delete-ext-chip" data-ext-idx="${i}" title="Remove extraction">${WorkflowIcons.cross}</button>
+                            </div>
+                        `).join('')}
+                    </div>
+
+                    <!-- Inline Rule Adder for Extractions -->
+                    <div class="rule-inline-adder" id="add-ext-adder">
+                        <div class="rule-adder-title">New Extract Rule</div>
+                        <div class="rule-adder-row">
+                            <select id="new-ext-target" class="rule-select-mini">
+                                <option value="body_json">JSON Body</option>
+                                <option value="header">Header</option>
+                                <option value="status">Status Code</option>
+                            </select>
+                            <input type="text" id="new-ext-path" class="rule-input-mini" placeholder="Path (e.g. data.id or [0].token)">
+                        </div>
+                        <div class="rule-adder-row">
+                            <input type="text" id="new-ext-var" class="rule-input-mini" placeholder="Variable Name (e.g. userId)">
+                            <label class="rule-checkbox-label" title="Save extracted variable to active environment profile">
+                                <input type="checkbox" id="new-ext-env">
+                                <span>Env</span>
+                            </label>
+                            <button type="button" class="primary-btn mini-btn" id="new-ext-btn">${WorkflowIcons.plus} Add</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 3: Compact Assertions -->
+            <div class="step-inspector-panel" id="panel-assertions" style="display: ${activeInspectorTab === 'assertions' ? 'flex' : 'none'};">
+                <div class="rule-chips-section">
+                    <div class="rule-chips-header">
+                        <span class="rule-chips-title">Active Assertions (${assertionsCount})</span>
+                        <span class="text-muted text-xs">Halts workflow execution if any assertion fails</span>
+                    </div>
+                    <div class="rule-chips-wrap" id="detail-assertions-chips">
+                        ${assertionsCount === 0 ? `<span class="text-muted text-xs">No assertions configured. Add one below.</span>` : ''}
+                        ${(step.assertions || []).map((ass, i) => {
+                            let statusClass = '';
+                            let icon = '';
+                            if (res && res.assertions && res.assertions[i]) {
+                                const aRes = res.assertions[i];
+                                statusClass = aRes.passed ? 'passed' : 'failed';
+                                icon = aRes.passed ? WorkflowIcons.check : WorkflowIcons.cross;
+                            }
+                            const label = ass.type === 'status_equals' ? `Status == ${ass.value}` :
+                                (ass.type === 'response_time_lt' ? `Time < ${ass.value}ms` :
+                                (ass.type === 'body_contains' ? `Body contains "${ass.value}"` :
+                                (ass.type === 'json_path_exists' ? `JSON Path ${ass.path} exists` :
+                                `JSON Path ${ass.path} == ${ass.value}`)));
+
+                            return `
+                                <div class="rule-chip ${statusClass}">
+                                    ${icon}<span>${DOM.escapeHTML(label)}</span>
+                                    <button class="chip-remove-btn delete-ass-chip" data-ass-idx="${i}" title="Remove assertion">${WorkflowIcons.cross}</button>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+
+                    <!-- Inline Rule Adder for Assertions -->
+                    <div class="rule-inline-adder" id="add-ass-adder">
+                        <div class="rule-adder-title">New Assertion Rule</div>
+                        <div class="rule-adder-row">
+                            <select id="new-ass-type" class="rule-select-mini">
+                                <option value="status_equals">Status Equals</option>
+                                <option value="response_time_lt">Time &lt; (ms)</option>
+                                <option value="body_contains">Body Contains</option>
+                                <option value="json_path_exists">JSON Path Exists</option>
+                                <option value="json_path_equals">JSON Path Equals</option>
+                            </select>
+                            <input type="text" id="new-ass-path" class="rule-input-mini" placeholder="JSON Path (e.g. data[0].id)" style="display:none;">
+                        </div>
+                        <div class="rule-adder-row">
+                            <input type="text" id="new-ass-val" class="rule-input-mini" placeholder="Expected Value (e.g. 200)">
+                            <button type="button" class="primary-btn mini-btn" id="new-ass-btn">${WorkflowIcons.plus} Add</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 4: Response Inspector -->
+            <div class="step-inspector-panel" id="panel-response" style="display: ${activeInspectorTab === 'response' ? 'flex' : 'none'};">
+                ${res ? `
+                    <div class="step-response-summary">
+                        <span class="badge ${res.passed ? 'status-green' : 'status-red'}">${res.status || '0'} ${DOM.escapeHTML(res.statusText || '')}</span>
+                        <span class="badge badge-default">${WorkflowIcons.clock} ${res.duration}ms</span>
+                        <span class="badge ${res.passed ? 'status-green' : 'status-red'}">${res.passed ? 'All Assertions Passed' : 'Assertion Failed'}</span>
+                    </div>
+                    <div style="font-size:11px;color:#8c90a4;margin-top:4px;">Response Body:</div>
+                    <pre class="step-response-pre">${DOM.escapeHTML(typeof res.data === 'object' ? JSON.stringify(res.data, null, 2) : String(res.data || 'No content'))}</pre>
+                ` : `
+                    <div style="text-align:center; padding: 40px 10px; color: #7b8098; font-size: 12px;">
+                        <p>No response recorded yet for this step.</p>
+                        <button class="primary-btn mini-btn" id="response-run-now-btn" style="margin-top:8px;">Run This Step Now</button>
+                    </div>
+                `}
+            </div>
+        `;
+
+        const mobileDetailLabel = document.getElementById('mobile-detail-nav-label');
+        if (mobileDetailLabel) {
+            mobileDetailLabel.textContent = step.name ? step.name.slice(0, 16) : 'Inspector';
+        }
+
+        bindDetailPaneEvents(step, chain);
     };
 
-    // Workflow Delegation Event Handler
-    const setupWorkflowListeners = () => {
-        const container = document.getElementById('chain-steps-container');
-        if (!container) return;
+    // Bind event handlers within Detail Pane (Surgical non-destructive updates)
+    const bindDetailPaneEvents = (step, chain) => {
+        const detailPane = document.getElementById('chain-detail-pane');
+        if (!detailPane) return;
 
-        container.addEventListener('click', async (e) => {
-            const card = e.target.closest('.chain-step-card');
-            if (!card) return;
-            const stepId = card.dataset.stepId;
-            const chain = StorageService.getChain(activeChainId);
-            const stepIndex = (chain.steps || []).findIndex(s => s.id === stepId);
-            const step = chain.steps[stepIndex];
-            if (!step) return;
+        // 1. Step Name
+        const nameInput = document.getElementById('step-name-input');
+        if (nameInput) {
+            nameInput.addEventListener('input', (e) => {
+                step.name = e.target.value.trim() || 'Untitled';
+                StorageService.saveChain(chain);
+                // Update master item title directly without re-render
+                const masterItem = document.querySelector(`.chain-master-item[data-step-id="${step.id}"] .step-item-name`);
+                if (masterItem) {
+                    masterItem.textContent = step.name;
+                    masterItem.title = step.name;
+                }
+            });
+        }
 
-            // Subtab navigation
-            const tabBtn = e.target.closest('.step-tab-btn');
-            if (tabBtn) {
-                e.stopPropagation();
-                const targetTab = tabBtn.dataset.stepTab;
-                activeStepTabs.set(stepId, targetTab);
-                card.querySelectorAll('.step-tab-btn').forEach(b => b.classList.remove('active'));
+        // 2. Step Method
+        const methodSelect = document.getElementById('step-method-select');
+        if (methodSelect) {
+            methodSelect.addEventListener('change', (e) => {
+                step.method = e.target.value;
+                StorageService.saveChain(chain);
+                // Update method badge in master list
+                const badge = document.querySelector(`.chain-master-item[data-step-id="${step.id}"] .step-method-badge`);
+                if (badge) {
+                    badge.textContent = step.method;
+                    badge.className = `step-method-badge ${DOM.getMethodColor(step.method)}`;
+                }
+            });
+        }
+
+        // 3. Step URL + Inline {{ autocomplete
+        const urlInput = document.getElementById('step-url-input');
+        if (urlInput) {
+            urlInput.addEventListener('input', (e) => {
+                step.url = e.target.value;
+                StorageService.saveChain(chain);
+                // Trigger variable autocomplete if user just typed {{
+                if (e.target.value.slice(0, e.target.selectionStart).endsWith('{{')) {
+                    showVariableAutocomplete(urlInput);
+                }
+            });
+        }
+
+        // URL Variable Inserter Button
+        document.getElementById('step-url-var-btn')?.addEventListener('click', (e) => {
+            showVariableAutocomplete(urlInput, e.currentTarget);
+        });
+
+        // 4. Tab Navigation
+        detailPane.querySelectorAll('.step-inspector-tab').forEach(tabBtn => {
+            tabBtn.addEventListener('click', () => {
+                activeInspectorTab = tabBtn.dataset.tab;
+                detailPane.querySelectorAll('.step-inspector-tab').forEach(b => b.classList.remove('active'));
                 tabBtn.classList.add('active');
-                card.querySelectorAll('.step-tab-panel').forEach(p => p.classList.add('hidden'));
-                const panel = card.querySelector(`.step-tab-${targetTab}`);
-                if (panel) panel.classList.remove('hidden');
+                detailPane.querySelectorAll('.step-inspector-panel').forEach(p => p.style.display = 'none');
+                const activePanel = document.getElementById(`panel-${activeInspectorTab}`);
+                if (activePanel) activePanel.style.display = 'flex';
+            });
+        });
+
+        // 5. Auth Override Toggle & Custom Fields
+        const authOverrideChk = document.getElementById('step-auth-override-chk');
+        if (authOverrideChk) {
+            authOverrideChk.addEventListener('change', (e) => {
+                if (e.target.checked) {
+                    step.authType = step.authType && step.authType !== 'inherit' ? step.authType : 'bearer';
+                } else {
+                    step.authType = 'inherit';
+                }
+                StorageService.saveChain(chain);
+                renderDetailPane(step.id);
+            });
+        }
+
+        const customAuthType = document.getElementById('step-custom-authtype');
+        if (customAuthType) {
+            customAuthType.addEventListener('change', (e) => {
+                step.authType = e.target.value;
+                StorageService.saveChain(chain);
+                renderDetailPane(step.id);
+            });
+        }
+
+        document.getElementById('step-auth-token-inp')?.addEventListener('input', (e) => {
+            step.authToken = e.target.value;
+            StorageService.saveChain(chain);
+        });
+        document.getElementById('step-auth-keyname-inp')?.addEventListener('input', (e) => {
+            step.apiKeyName = e.target.value;
+            StorageService.saveChain(chain);
+        });
+        document.getElementById('step-auth-keyval-inp')?.addEventListener('input', (e) => {
+            step.apiKeyValue = e.target.value;
+            StorageService.saveChain(chain);
+        });
+        document.getElementById('step-auth-user-inp')?.addEventListener('input', (e) => {
+            step.authUser = e.target.value;
+            StorageService.saveChain(chain);
+        });
+        document.getElementById('step-auth-pass-inp')?.addEventListener('input', (e) => {
+            step.authPass = e.target.value;
+            StorageService.saveChain(chain);
+        });
+
+        // 6. Headers
+        const headersTextarea = document.getElementById('step-headers-textarea');
+        if (headersTextarea) {
+            headersTextarea.addEventListener('input', (e) => {
+                step.headers = parseHeadersText(e.target.value);
+                StorageService.saveChain(chain);
+                if (e.target.value.slice(0, e.target.selectionStart).endsWith('{{')) {
+                    showVariableAutocomplete(headersTextarea);
+                }
+            });
+            document.getElementById('step-headers-var-btn')?.addEventListener('click', (e) => {
+                showVariableAutocomplete(headersTextarea, e.currentTarget);
+            });
+        }
+
+        // 7. Body & Format
+        const bodyTextarea = document.getElementById('step-body-textarea');
+        if (bodyTextarea) {
+            bodyTextarea.addEventListener('input', (e) => {
+                step.body = e.target.value;
+                StorageService.saveChain(chain);
+                if (e.target.value.slice(0, e.target.selectionStart).endsWith('{{')) {
+                    showVariableAutocomplete(bodyTextarea);
+                }
+            });
+            document.getElementById('step-body-var-btn')?.addEventListener('click', (e) => {
+                showVariableAutocomplete(bodyTextarea, e.currentTarget);
+            });
+        }
+
+        const bodyFormatSelect = document.getElementById('step-bodyformat-select');
+        if (bodyFormatSelect) {
+            bodyFormatSelect.addEventListener('change', (e) => {
+                step.bodyFormat = e.target.value;
+                StorageService.saveChain(chain);
+            });
+        }
+
+        // 8. Delete Extraction Chip
+        detailPane.querySelectorAll('.delete-ext-chip').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const idx = parseInt(btn.dataset.extIdx, 10);
+                if (!isNaN(idx)) {
+                    step.extracts.splice(idx, 1);
+                    StorageService.saveChain(chain);
+                    renderDetailPane(step.id);
+                }
+            });
+        });
+
+        // Add Extraction
+        const newExtTarget = document.getElementById('new-ext-target');
+        const newExtPath = document.getElementById('new-ext-path');
+        if (newExtTarget && newExtPath) {
+            newExtTarget.addEventListener('change', () => {
+                newExtPath.style.display = newExtTarget.value === 'status' ? 'none' : 'block';
+            });
+        }
+
+        document.getElementById('new-ext-btn')?.addEventListener('click', () => {
+            const target = document.getElementById('new-ext-target')?.value || 'body_json';
+            const path = document.getElementById('new-ext-path')?.value.trim() || '';
+            const varName = document.getElementById('new-ext-var')?.value.trim().replace(/^\{\{|\}\}$/g, '') || '';
+            const saveToEnv = !!document.getElementById('new-ext-env')?.checked;
+
+            if (!varName) {
+                return Toast.show("Please enter a variable name for the extraction", "error");
+            }
+
+            step.extracts = step.extracts || [];
+            step.extracts.push({
+                id: 'ext_' + Date.now(),
+                target,
+                sourcePath: path,
+                variableName: varName,
+                saveToEnv
+            });
+            StorageService.saveChain(chain);
+            renderDetailPane(step.id);
+            Toast.show(`Added extract -> {{${varName}}}`);
+        });
+
+        // 9. Delete Assertion Chip
+        detailPane.querySelectorAll('.delete-ass-chip').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const idx = parseInt(btn.dataset.assIdx, 10);
+                if (!isNaN(idx)) {
+                    step.assertions.splice(idx, 1);
+                    StorageService.saveChain(chain);
+                    renderDetailPane(step.id);
+                }
+            });
+        });
+
+        // Add Assertion
+        const newAssType = document.getElementById('new-ass-type');
+        const newAssPath = document.getElementById('new-ass-path');
+        if (newAssType && newAssPath) {
+            newAssType.addEventListener('change', () => {
+                newAssPath.style.display = newAssType.value.startsWith('json_path') ? 'block' : 'none';
+            });
+        }
+
+        document.getElementById('new-ass-btn')?.addEventListener('click', () => {
+            const type = document.getElementById('new-ass-type')?.value || 'status_equals';
+            const path = document.getElementById('new-ass-path')?.value.trim() || '';
+            const val = document.getElementById('new-ass-val')?.value.trim() || '';
+
+            if (type.startsWith('json_path') && !path) {
+                return Toast.show("Please enter a JSON path", "error");
+            }
+            if (!val) {
+                return Toast.show("Please enter an expected value", "error");
+            }
+
+            step.assertions = step.assertions || [];
+            step.assertions.push({
+                id: 'ass_' + Date.now(),
+                type,
+                path,
+                value: val
+            });
+            StorageService.saveChain(chain);
+            renderDetailPane(step.id);
+            Toast.show(`Added assertion`);
+        });
+
+        // 10. Run Single Step
+        const runSingleStep = async () => {
+            if (isWorkflowRunning) return;
+            isWorkflowRunning = true;
+
+            const runBtn = document.getElementById('detail-run-step-btn');
+            if (runBtn) {
+                runBtn.innerHTML = `${WorkflowIcons.spinner} <span>Running...</span>`;
+                runBtn.disabled = true;
+            }
+
+            // Update master item status
+            const masterItem = document.querySelector(`.chain-master-item[data-step-id="${step.id}"]`);
+            if (masterItem) {
+                masterItem.classList.add('is-running');
+                const pill = masterItem.querySelector('.step-item-status-pill');
+                if (pill) {
+                    pill.className = 'step-item-status-pill running';
+                    pill.textContent = 'Running...';
+                }
+            }
+
+            try {
+                const res = await ChainService.executeStep(step, activeRuntimeContext, chain.auth);
+                lastWorkflowResults[step.id] = res;
+
+                if (res.extracted) {
+                    Object.assign(activeRuntimeContext, res.extracted);
+                }
+
+                updateRibbonUI(res.passed ? 'Step Passed' : 'Step Failed', `${res.duration}ms`, chain.steps.length);
+
+                // Update master item visually
+                if (masterItem) {
+                    masterItem.classList.remove('is-running');
+                    masterItem.classList.remove('is-passed', 'is-failed');
+                    masterItem.classList.add(res.passed ? 'is-passed' : 'is-failed');
+                    const pill = masterItem.querySelector('.step-item-status-pill');
+                    if (pill) {
+                        pill.className = `step-item-status-pill ${res.passed ? 'passed' : 'failed'}`;
+                        pill.textContent = `${res.status} (${res.duration}ms)`;
+                    }
+                }
+
+                // Switch to response tab to show results
+                activeInspectorTab = 'response';
+                renderDetailPane(step.id);
+
+                Toast.show(
+                    res.passed ? `Step succeeded (${res.status} in ${res.duration}ms)` : `Step failed: ${res.error || 'Assertion failed'}`,
+                    res.passed ? 'success' : 'error'
+                );
+            } catch (err) {
+                Toast.show(`Execution error: ${err.message}`, 'error');
+            } finally {
+                isWorkflowRunning = false;
+                if (runBtn) {
+                    runBtn.innerHTML = `${WorkflowIcons.play} <span>Run Step</span>`;
+                    runBtn.disabled = false;
+                }
+            }
+        };
+
+        document.getElementById('detail-run-step-btn')?.addEventListener('click', runSingleStep);
+        document.getElementById('response-run-now-btn')?.addEventListener('click', runSingleStep);
+
+        // Mobile Back to Steps
+        document.getElementById('mobile-back-to-steps-btn')?.addEventListener('click', () => {
+            setMobileWorkflowView('master');
+        });
+
+        // 11. Load Step into Request Editor
+        document.getElementById('detail-load-step-btn')?.addEventListener('click', () => {
+            const methodSelect = document.getElementById('method-select');
+            const urlInput = document.getElementById('url-input');
+            const headersEditor = document.getElementById('headers-editor');
+            const bodyEditor = document.getElementById('body-editor');
+            const bodyTypeSelect = document.getElementById('body-type-select');
+
+            if (methodSelect) {
+                methodSelect.value = step.method || 'GET';
+                DOM.updateMethodBadge(methodSelect.value);
+            }
+            if (urlInput) urlInput.value = step.url || '';
+            if (headersEditor) headersEditor.value = stringifyHeaders(step.headers);
+            if (bodyTypeSelect) {
+                bodyTypeSelect.value = step.bodyFormat || (step.method === 'GET' ? 'none' : 'json');
+                document.getElementById('body-content')?.classList.toggle('hidden', bodyTypeSelect.value === 'none');
+            }
+            if (bodyEditor) bodyEditor.value = step.body || '';
+
+            // Handle Auth
+            const effectiveAuth = (!step.authType || step.authType === 'inherit') ? chain.auth : step;
+            if (effectiveAuth) {
+                const authTypeSelect = document.getElementById('auth-type-select');
+                if (authTypeSelect) {
+                    authTypeSelect.value = effectiveAuth.type || effectiveAuth.authType || 'none';
+                    authTypeSelect.dispatchEvent(new Event('change'));
+                }
+            }
+
+            document.getElementById('chains-modal')?.classList.add('hidden');
+            Toast.show(`Loaded "${step.name}" into Request Editor`);
+        });
+
+        // 12. Delete Step
+        document.getElementById('detail-delete-step-btn')?.addEventListener('click', async () => {
+            if (await Dialog.confirm(`Delete step "${step.name}"?`)) {
+                chain.steps = chain.steps.filter(s => s.id !== step.id);
+                StorageService.saveChain(chain);
+                selectedStepId = chain.steps[0]?.id || null;
+                renderMasterList();
+                renderDetailPane(selectedStepId);
+                updateRibbonUI('Ready', '0ms', chain.steps.length);
+                Toast.show("Step deleted");
+            }
+        });
+    };
+
+    // Render the entire active workflow view (Master + Detail + Meta)
+    const renderActiveWorkflow = () => {
+        const chain = StorageService.getChain(activeChainId);
+        if (!chain) return;
+
+        // Ensure selectedStepId points to a valid step
+        if (!selectedStepId || !chain.steps.some(s => s.id === selectedStepId)) {
+            selectedStepId = chain.steps[0]?.id || null;
+        }
+
+        renderWorkflowMetaAndAuth();
+        renderMasterList();
+        renderDetailPane(selectedStepId);
+        updateRibbonUI('Ready', '0ms', (chain.steps || []).length);
+    };
+
+    // Workflow Master List event delegation (selection, reorder, checkbox, delete)
+    const setupWorkflowListeners = () => {
+        const masterList = document.getElementById('chain-master-list');
+        if (!masterList) return;
+
+        // Click delegation on master list
+        masterList.addEventListener('click', async (e) => {
+            const chain = StorageService.getChain(activeChainId);
+            if (!chain) return;
+
+            // 1. Step selection
+            const item = e.target.closest('.chain-master-item');
+            if (item && !e.target.closest('button') && !e.target.closest('input')) {
+                const stepId = item.dataset.stepId;
+                if (stepId && stepId !== selectedStepId) {
+                    selectedStepId = stepId;
+                    masterList.querySelectorAll('.chain-master-item').forEach(el => el.classList.remove('is-selected'));
+                    item.classList.add('is-selected');
+                    renderDetailPane(stepId);
+                }
+                setMobileWorkflowView('detail');
                 return;
             }
 
-            // Move Step Up
-            if (e.target.closest('.step-move-up')) {
-                e.stopPropagation();
-                if (stepIndex > 0) {
-                    syncAllCardsToChain();
-                    const updated = StorageService.getChain(activeChainId);
-                    const temp = updated.steps[stepIndex - 1];
-                    updated.steps[stepIndex - 1] = updated.steps[stepIndex];
-                    updated.steps[stepIndex] = temp;
-                    StorageService.saveChain(updated);
-                    renderActiveWorkflow();
+            // 2. Move Up
+            const upBtn = e.target.closest('.step-move-up');
+            if (upBtn) {
+                const stepId = upBtn.dataset.stepId;
+                const idx = chain.steps.findIndex(s => s.id === stepId);
+                if (idx > 0) {
+                    const temp = chain.steps[idx];
+                    chain.steps[idx] = chain.steps[idx - 1];
+                    chain.steps[idx - 1] = temp;
+                    StorageService.saveChain(chain);
+                    renderMasterList();
                 }
                 return;
             }
 
-            // Move Step Down
-            if (e.target.closest('.step-move-down')) {
-                e.stopPropagation();
-                if (stepIndex < chain.steps.length - 1) {
-                    syncAllCardsToChain();
-                    const updated = StorageService.getChain(activeChainId);
-                    const temp = updated.steps[stepIndex + 1];
-                    updated.steps[stepIndex + 1] = updated.steps[stepIndex];
-                    updated.steps[stepIndex] = temp;
-                    StorageService.saveChain(updated);
-                    renderActiveWorkflow();
+            // 3. Move Down
+            const downBtn = e.target.closest('.step-move-down');
+            if (downBtn) {
+                const stepId = downBtn.dataset.stepId;
+                const idx = chain.steps.findIndex(s => s.id === stepId);
+                if (idx !== -1 && idx < chain.steps.length - 1) {
+                    const temp = chain.steps[idx];
+                    chain.steps[idx] = chain.steps[idx + 1];
+                    chain.steps[idx + 1] = temp;
+                    StorageService.saveChain(chain);
+                    renderMasterList();
                 }
                 return;
             }
 
-            // Delete Step
-            if (e.target.closest('.step-delete-btn')) {
-                e.stopPropagation();
-                if (await Dialog.confirm(`Delete step "${step.name || 'this step'}"?`)) {
-                    syncAllCardsToChain();
-                    const updated = StorageService.getChain(activeChainId);
-                    updated.steps = updated.steps.filter(s => s.id !== stepId);
-                    StorageService.saveChain(updated);
-                    delete lastWorkflowResults[stepId];
-                    renderActiveWorkflow();
+            // 4. Delete step
+            const delBtn = e.target.closest('.master-delete-step-btn');
+            if (delBtn) {
+                const stepId = delBtn.dataset.stepId;
+                const step = chain.steps.find(s => s.id === stepId);
+                if (step && await Dialog.confirm(`Delete step "${step.name}"?`)) {
+                    chain.steps = chain.steps.filter(s => s.id !== stepId);
+                    StorageService.saveChain(chain);
+                    if (selectedStepId === stepId) {
+                        selectedStepId = chain.steps[0]?.id || null;
+                    }
+                    renderMasterList();
+                    renderDetailPane(selectedStepId);
+                    updateRibbonUI('Ready', '0ms', chain.steps.length);
                     Toast.show("Step deleted");
                 }
                 return;
             }
+        });
 
-            // Run Single Step
-            if (e.target.closest('.step-run-btn')) {
-                e.stopPropagation();
-                syncAllCardsToChain();
-                const freshChain = StorageService.getChain(activeChainId);
-                const freshStep = freshChain.steps.find(s => s.id === stepId);
-                if (!freshStep) return;
-
-                card.classList.remove('is-passed', 'is-failed');
-                card.classList.add('is-running');
-                const chip = card.querySelector('.step-status-chip');
-                if (chip) {
-                    chip.className = 'step-status-chip running';
-                    chip.textContent = 'Running...';
+        // Checkbox toggle delegation
+        masterList.addEventListener('change', (e) => {
+            const chk = e.target.closest('.master-step-checkbox');
+            if (chk) {
+                const chain = StorageService.getChain(activeChainId);
+                const step = chain?.steps?.find(s => s.id === chk.dataset.stepId);
+                if (step) {
+                    step.enabled = chk.checked;
+                    StorageService.saveChain(chain);
                 }
-
-                const result = await ChainService.executeStep(freshStep, activeRuntimeContext);
-                lastWorkflowResults[stepId] = result;
-
-                if (result.extracted) {
-                    Object.assign(activeRuntimeContext, result.extracted);
-                }
-
-                activeStepTabs.set(stepId, 'response');
-                expandedStepIds.add(stepId);
-                renderActiveWorkflow();
-
-                Toast.show(result.passed ? `Step succeeded (${result.status})` : `Step failed (${result.status || 'Error'})`, result.passed ? 'success' : 'error');
-                return;
-            }
-
-            // Load Step into Main Request Editor
-            if (e.target.closest('.step-load-btn')) {
-                e.stopPropagation();
-                syncAllCardsToChain();
-                document.getElementById('url-input').value = step.url || '';
-                DOM.setDropdown('method-dropdown', step.method || 'GET');
-
-                // Restore headers
-                document.getElementById('headers-list').innerHTML = '';
-                if (step.headers && typeof step.headers === 'object') {
-                    Object.entries(step.headers).forEach(([k, v]) => {
-                        DOM.addRow('headers-list', 'Header Key', 'Value', k, v, true, true);
-                    });
-                }
-
-                // Restore body
-                const bFormat = step.bodyFormat || (step.method === 'GET' ? 'none' : 'json');
-                DOM.setDropdown('body-format-dropdown', bFormat);
-                updateBodyFormatUI(bFormat);
-                document.getElementById('request-body').value = step.body || '';
-
-                // Restore auth
-                const authType = step.authType || 'none';
-                DOM.setDropdown('auth-type-dropdown', authType);
-                renderAuthUI(authType, step);
-
-                document.getElementById('chains-modal').classList.add('hidden');
-                Toast.show(`Loaded "${step.name}" into Request Editor`);
-                return;
-            }
-
-            // Add Extraction Rule
-            if (e.target.closest('.step-add-ext-btn')) {
-                e.stopPropagation();
-                syncAllCardsToChain();
-                const freshChain = StorageService.getChain(activeChainId);
-                const freshStep = freshChain.steps.find(s => s.id === stepId);
-                if (freshStep) {
-                    if (!Array.isArray(freshStep.extracts)) freshStep.extracts = [];
-                    freshStep.extracts.push({
-                        id: 'ext_' + Date.now(),
-                        target: 'body_json',
-                        sourcePath: '',
-                        variableName: 'extractedVar',
-                        saveToEnv: false
-                    });
-                    activeStepTabs.set(stepId, 'extract');
-                    expandedStepIds.add(stepId);
-                    StorageService.saveChain(freshChain);
-                    renderActiveWorkflow();
-                }
-                return;
-            }
-
-            // Remove Extraction Rule
-            if (e.target.closest('.rule-remove-ext-btn')) {
-                e.stopPropagation();
-                const extRow = e.target.closest('.rule-row[data-ext-idx]');
-                if (extRow) {
-                    const idx = Number(extRow.dataset.extIdx);
-                    syncAllCardsToChain();
-                    const freshChain = StorageService.getChain(activeChainId);
-                    const freshStep = freshChain.steps.find(s => s.id === stepId);
-                    if (freshStep && freshStep.extracts) {
-                        freshStep.extracts.splice(idx, 1);
-                        activeStepTabs.set(stepId, 'extract');
-                        StorageService.saveChain(freshChain);
-                        renderActiveWorkflow();
-                    }
-                }
-                return;
-            }
-
-            // Add Assertion Rule
-            if (e.target.closest('.step-add-ass-btn')) {
-                e.stopPropagation();
-                syncAllCardsToChain();
-                const freshChain = StorageService.getChain(activeChainId);
-                const freshStep = freshChain.steps.find(s => s.id === stepId);
-                if (freshStep) {
-                    if (!Array.isArray(freshStep.assertions)) freshStep.assertions = [];
-                    freshStep.assertions.push({
-                        id: 'ass_' + Date.now(),
-                        type: 'status_equals',
-                        path: '',
-                        value: '200'
-                    });
-                    activeStepTabs.set(stepId, 'assertions');
-                    expandedStepIds.add(stepId);
-                    StorageService.saveChain(freshChain);
-                    renderActiveWorkflow();
-                }
-                return;
-            }
-
-            // Remove Assertion Rule
-            if (e.target.closest('.rule-remove-ass-btn')) {
-                e.stopPropagation();
-                const assRow = e.target.closest('.rule-row[data-ass-idx]');
-                if (assRow) {
-                    const idx = Number(assRow.dataset.assIdx);
-                    syncAllCardsToChain();
-                    const freshChain = StorageService.getChain(activeChainId);
-                    const freshStep = freshChain.steps.find(s => s.id === stepId);
-                    if (freshStep && freshStep.assertions) {
-                        freshStep.assertions.splice(idx, 1);
-                        activeStepTabs.set(stepId, 'assertions');
-                        StorageService.saveChain(freshChain);
-                        renderActiveWorkflow();
-                    }
-                }
-                return;
-            }
-
-            // Toggle Card Expansion when clicking header (or explicit expand toggle button)
-            const header = e.target.closest('.step-card-header');
-            const toggleBtn = e.target.closest('.step-expand-toggle-btn');
-            const isInteractiveControl = e.target.closest('input, select, textarea, .step-arrow-btn, .step-run-btn, .step-load-btn, .step-delete-btn');
-
-            if ((header && !isInteractiveControl) || toggleBtn) {
-                if (expandedStepIds.has(stepId)) {
-                    expandedStepIds.delete(stepId);
-                } else {
-                    expandedStepIds.add(stepId);
-                }
-                const body = card.querySelector('.step-card-body');
-                const chevron = card.querySelector('.chevron-toggle');
-                const tBtn = card.querySelector('.step-expand-toggle-btn');
-                const isNowExpanded = expandedStepIds.has(stepId);
-                if (body) body.classList.toggle('hidden', !isNowExpanded);
-                if (chevron) chevron.textContent = isNowExpanded ? '▲' : '▼';
-                if (tBtn) tBtn.setAttribute('aria-expanded', isNowExpanded);
-                return;
             }
         });
 
-        // Toggle assertion path input visibility dynamically
-        container.addEventListener('change', (e) => {
-            if (e.target.classList.contains('rule-ass-type')) {
-                const row = e.target.closest('.rule-row');
-                const pathInput = row?.querySelector('.rule-ass-path');
-                if (pathInput) {
-                    if (['json_path_exists', 'json_path_equals'].includes(e.target.value)) {
-                        pathInput.classList.remove('hidden');
-                    } else {
-                        pathInput.classList.add('hidden');
-                    }
-                }
-            }
+        // Mobile Master/Detail switcher tab buttons
+        document.getElementById('mobile-nav-steps-btn')?.addEventListener('click', () => {
+            setMobileWorkflowView('master');
+        });
+        document.getElementById('mobile-nav-detail-btn')?.addEventListener('click', () => {
+            setMobileWorkflowView('detail');
         });
     };
 
-    // Modal Header Toolbar Actions
-    document.getElementById('chain-select').addEventListener('change', (e) => {
-        syncAllCardsToChain();
+    // ----------------------------------------------------
+    // Modal Level Workflow Management Event Listeners
+    // ----------------------------------------------------
+
+    // Workflow Select Change
+    document.getElementById('chain-select')?.addEventListener('change', (e) => {
         activeChainId = e.target.value;
+        const chain = StorageService.getChain(activeChainId);
+        selectedStepId = chain?.steps?.[0]?.id || null;
         lastWorkflowResults = {};
         activeRuntimeContext = {};
         renderActiveWorkflow();
     });
 
-    document.getElementById('new-chain-btn').addEventListener('click', async () => {
-        const name = await Dialog.prompt("Create New Workflow", "New API Workflow", "Workflow Name");
-        if (name) {
-            syncAllCardsToChain();
-            const newChain = {
-                id: 'chain_' + Date.now(),
-                name,
-                description: 'Custom chained requests workflow',
-                steps: [
-                    {
-                        id: 'step_' + Date.now(),
-                        name: '1. Initial Request',
-                        enabled: true,
-                        method: 'GET',
-                        url: '{{base_url}}/api/status',
-                        headers: {},
-                        bodyFormat: 'none',
-                        body: '',
-                        params: {},
-                        extracts: [],
-                        assertions: [{ id: 'ass_init', type: 'status_equals', value: '200' }]
-                    }
-                ]
-            };
-            StorageService.saveChain(newChain);
-            activeChainId = newChain.id;
-            lastWorkflowResults = {};
-            activeRuntimeContext = {};
-            expandedStepIds.add(newChain.steps[0].id);
-            renderWorkflowSelector();
-            renderActiveWorkflow();
-            Toast.show(`Workflow "${name}" created`);
+    // Default Auth Type Change
+    document.getElementById('workflow-auth-type')?.addEventListener('change', (e) => {
+        const chain = StorageService.getChain(activeChainId);
+        if (!chain) return;
+        chain.auth = chain.auth || {};
+        chain.auth.type = e.target.value;
+        StorageService.saveChain(chain);
+        renderWorkflowMetaAndAuth();
+        const tagEl = document.querySelector('.step-auth-inherited-tag');
+        if (tagEl) {
+            tagEl.innerHTML = `${WorkflowIcons.shield} <span>Inheriting Workflow Auth (${(chain.auth.type || 'NONE').toUpperCase()})</span>`;
         }
     });
 
-    document.getElementById('duplicate-chain-btn').addEventListener('click', () => {
-        syncAllCardsToChain();
-        const current = StorageService.getChain(activeChainId);
-        if (!current) return;
-        const dup = JSON.parse(JSON.stringify(current));
-        dup.id = 'chain_' + Date.now();
-        dup.name = `${current.name} (Copy)`;
-        StorageService.saveChain(dup);
-        activeChainId = dup.id;
-        renderWorkflowSelector();
+    // New Workflow
+    document.getElementById('new-chain-btn')?.addEventListener('click', async () => {
+        const name = await Dialog.prompt("Create New Workflow", "New API Pipeline", "Workflow Name");
+        if (!name) return;
+        const newChain = {
+            id: 'chain_' + Date.now(),
+            name: name.trim(),
+            description: 'Custom chained sequence of API requests',
+            auth: { type: 'none', token: '', prefix: 'Bearer', user: '', pass: '', keyName: '', keyValue: '', keyAddTo: 'header' },
+            steps: [
+                {
+                    id: 'step_' + Date.now(),
+                    name: '1. Initial Request',
+                    enabled: true,
+                    method: 'GET',
+                    url: 'https://jsonplaceholder.typicode.com/todos/1',
+                    headers: {},
+                    authType: 'inherit',
+                    bodyFormat: 'none',
+                    body: '',
+                    params: {},
+                    extracts: [
+                        { id: 'ext_' + Date.now(), target: 'body_json', sourcePath: 'id', variableName: 'todoId', saveToEnv: false }
+                    ],
+                    assertions: [
+                        { id: 'ass_' + Date.now(), type: 'status_equals', value: '200' }
+                    ]
+                }
+            ]
+        };
+        StorageService.saveChain(newChain);
+        activeChainId = newChain.id;
+        selectedStepId = newChain.steps[0].id;
         renderActiveWorkflow();
-        Toast.show(`Duplicated workflow as "${dup.name}"`);
+        Toast.show("New workflow created");
     });
 
-    document.getElementById('rename-chain-btn').addEventListener('click', async () => {
-        const current = StorageService.getChain(activeChainId);
-        if (!current) return;
-        const newName = await Dialog.prompt("Rename Workflow", current.name, "New Name");
-        if (newName && newName !== current.name) {
-            current.name = newName;
-            StorageService.saveChain(current);
-            renderWorkflowSelector();
-            renderActiveWorkflow();
-            Toast.show(`Renamed to "${newName}"`);
+    // Toggle Workflow Settings Drawer (Manage)
+    document.getElementById('toggle-workflow-settings-btn')?.addEventListener('click', () => {
+        const drawer = document.getElementById('workflow-settings-drawer');
+        const btn = document.getElementById('toggle-workflow-settings-btn');
+        if (drawer) {
+            drawer.classList.toggle('hidden');
+            btn?.classList.toggle('active', !drawer.classList.contains('hidden'));
         }
     });
 
-    document.getElementById('delete-chain-btn').addEventListener('click', async () => {
+    // Duplicate Workflow
+    document.getElementById('duplicate-chain-btn')?.addEventListener('click', () => {
+        const chain = StorageService.getChain(activeChainId);
+        if (!chain) return;
+        const dupChain = JSON.parse(JSON.stringify(chain));
+        dupChain.id = 'chain_' + Date.now();
+        dupChain.name = `${chain.name} (Copy)`;
+        StorageService.saveChain(dupChain);
+        activeChainId = dupChain.id;
+        selectedStepId = dupChain.steps[0]?.id || null;
+        renderActiveWorkflow();
+        Toast.show("Workflow duplicated");
+    });
+
+    // Rename Workflow
+    document.getElementById('rename-chain-btn')?.addEventListener('click', async () => {
+        const chain = StorageService.getChain(activeChainId);
+        if (!chain) return;
+        const newName = await Dialog.prompt("Rename Workflow", chain.name, "New Name");
+        if (newName && newName.trim()) {
+            chain.name = newName.trim();
+            StorageService.saveChain(chain);
+            renderWorkflowMetaAndAuth();
+            Toast.show("Workflow renamed");
+        }
+    });
+
+    // Delete Active Workflow
+    document.getElementById('delete-chain-btn')?.addEventListener('click', async () => {
         const chains = StorageService.getChains();
         if (chains.length <= 1) {
             return Toast.show("Cannot delete the only workflow", "error");
         }
         if (await Dialog.confirm("Delete this workflow?")) {
             StorageService.deleteChain(activeChainId);
-            activeChainId = StorageService.getChains()[0]?.id;
+            activeChainId = StorageService.getChains()[0]?.id || 'chain_json_placeholder';
+            selectedStepId = StorageService.getChain(activeChainId)?.steps?.[0]?.id || null;
             lastWorkflowResults = {};
             activeRuntimeContext = {};
-            renderWorkflowSelector();
             renderActiveWorkflow();
             Toast.show("Workflow deleted");
         }
     });
 
-    // Run All Steps Sequentially
-    document.getElementById('run-all-chain-btn').addEventListener('click', async () => {
+    // Restore Verified Sample Workflow
+    document.getElementById('reset-sample-chain-btn')?.addEventListener('click', async () => {
+        if (await Dialog.confirm("Reset the sample JSONPlaceholder workflow to its verified defaults?")) {
+            StorageService.restoreDefaultWorkflow();
+            activeChainId = 'chain_json_placeholder';
+            selectedStepId = 'step_fetch_user';
+            lastWorkflowResults = {};
+            activeRuntimeContext = {};
+            renderActiveWorkflow();
+            Toast.show("Sample workflow restored to verified defaults");
+        }
+    });
+
+    // Run Entire Workflow Sequentially (Non-destructive live UI updates)
+    document.getElementById('run-all-chain-btn')?.addEventListener('click', async () => {
         if (isWorkflowRunning) return;
-        syncAllCardsToChain();
         const chain = StorageService.getChain(activeChainId);
         if (!chain || !chain.steps || chain.steps.length === 0) {
             return Toast.show("No steps in workflow to run", "error");
@@ -1262,40 +1793,44 @@ document.addEventListener('DOMContentLoaded', () => {
 
         isWorkflowRunning = true;
         const runBtn = document.getElementById('run-all-chain-btn');
-        runBtn.textContent = '⏳ Running Workflow...';
+        runBtn.innerHTML = `${WorkflowIcons.spinner} <span>Running...</span>`;
         runBtn.disabled = true;
 
         lastWorkflowResults = {};
         activeRuntimeContext = {};
         updateRibbonUI('Running Step 1...', '0ms', chain.steps.length);
 
-        const container = document.getElementById('chain-steps-container');
+        const masterList = document.getElementById('chain-master-list');
 
         const overallResult = await ChainService.runChain(chain, (progress) => {
             const stepId = progress.stepId;
-            const card = container?.querySelector(`.chain-step-card[data-step-id="${stepId}"]`);
+            const item = masterList?.querySelector(`.chain-master-item[data-step-id="${stepId}"]`);
 
             if (progress.status === 'running') {
-                if (card) {
-                    card.classList.remove('is-passed', 'is-failed');
-                    card.classList.add('is-running');
-                    const chip = card.querySelector('.step-status-chip');
-                    if (chip) {
-                        chip.className = 'step-status-chip running';
-                        chip.textContent = 'Running...';
+                if (item) {
+                    item.classList.remove('is-passed', 'is-failed');
+                    item.classList.add('is-running');
+                    const pill = item.querySelector('.step-item-status-pill');
+                    if (pill) {
+                        pill.className = 'step-item-status-pill running';
+                        pill.textContent = 'Running...';
                     }
                 }
                 updateRibbonUI(`Running Step ${progress.stepIndex + 1}...`, '...', chain.steps.length);
             } else {
                 lastWorkflowResults[stepId] = progress.result;
-                if (card) {
-                    card.classList.remove('is-running');
-                    card.classList.add(progress.status === 'passed' ? 'is-passed' : 'is-failed');
-                    const chip = card.querySelector('.step-status-chip');
-                    if (chip) {
-                        chip.className = `step-status-chip ${progress.status}`;
-                        chip.textContent = `${progress.result?.status || 0} (${progress.result?.duration}ms)`;
+                if (item) {
+                    item.classList.remove('is-running');
+                    item.classList.add(progress.status === 'passed' ? 'is-passed' : 'is-failed');
+                    const pill = item.querySelector('.step-item-status-pill');
+                    if (pill) {
+                        pill.className = `step-item-status-pill ${progress.status}`;
+                        pill.textContent = `${progress.result?.status || 0} (${progress.result?.duration}ms)`;
                     }
+                }
+
+                if (selectedStepId === stepId) {
+                    renderDetailPane(stepId);
                 }
             }
 
@@ -1310,25 +1845,33 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         isWorkflowRunning = false;
-        runBtn.textContent = '▶ Run Entire Chain';
+        runBtn.innerHTML = `${WorkflowIcons.play} <span>Run Workflow</span>`;
         runBtn.disabled = false;
 
-        renderActiveWorkflow();
         updateRibbonUI(
             overallResult.passed ? 'Passed' : 'Failed',
             `${overallResult.totalDuration}ms`,
             chain.steps.length
         );
 
+        if (!overallResult.passed) {
+            const failedStep = chain.steps.find(s => lastWorkflowResults[s.id] && !lastWorkflowResults[s.id].passed);
+            if (failedStep) {
+                selectedStepId = failedStep.id;
+                activeInspectorTab = 'response';
+                renderMasterList();
+                renderDetailPane(selectedStepId);
+            }
+        }
+
         Toast.show(
-            overallResult.passed ? `All steps passed in ${overallResult.totalDuration}ms!` : `Workflow stopped on failed step`,
+            overallResult.passed ? `All steps passed in ${overallResult.totalDuration}ms!` : `Workflow stopped: assertion or request failed`,
             overallResult.passed ? 'success' : 'error'
         );
     });
 
-    // Add Blank Step
-    document.getElementById('add-chain-step-btn').addEventListener('click', () => {
-        syncAllCardsToChain();
+    // Add Blank Step Button
+    document.getElementById('add-chain-step-btn')?.addEventListener('click', () => {
         const chain = StorageService.getChain(activeChainId);
         if (!chain) return;
         const newStepId = 'step_' + Date.now();
@@ -1338,8 +1881,9 @@ document.addEventListener('DOMContentLoaded', () => {
             name: `${stepNum}. Step ${stepNum}`,
             enabled: true,
             method: 'GET',
-            url: '{{base_url}}/',
+            url: 'https://jsonplaceholder.typicode.com/posts/1',
             headers: {},
+            authType: 'inherit',
             bodyFormat: 'none',
             body: '',
             params: {},
@@ -1347,15 +1891,15 @@ document.addEventListener('DOMContentLoaded', () => {
             assertions: [{ id: 'ass_' + Date.now(), type: 'status_equals', value: '200' }]
         });
         StorageService.saveChain(chain);
-        expandedStepIds.add(newStepId);
-        renderWorkflowSelector();
-        renderActiveWorkflow();
+        selectedStepId = newStepId;
+        renderMasterList();
+        renderDetailPane(newStepId);
+        setMobileWorkflowView('detail');
         Toast.show(`Added Step ${stepNum}`);
     });
 
-    // Import Current Request as Step
-    document.getElementById('import-current-as-step-btn').addEventListener('click', () => {
-        syncAllCardsToChain();
+    // Import Current Request into Workflow
+    document.getElementById('import-current-as-step-btn')?.addEventListener('click', () => {
         const currentReq = scrapeCurrentState();
         const chain = StorageService.getChain(activeChainId);
         if (!chain) return;
@@ -1366,7 +1910,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const urlObj = new URL(currentReq.url);
             stepName += urlObj.pathname;
         } catch (e) {
-            stepName += currentReq.url ? currentReq.url.slice(0, 20) : 'Request';
+            stepName += currentReq.url ? currentReq.url.slice(0, 22) : 'Request';
         }
 
         chain.steps.push({
@@ -1376,7 +1920,7 @@ document.addEventListener('DOMContentLoaded', () => {
             method: currentReq.method || 'GET',
             url: currentReq.url || '',
             headers: currentReq.headers || {},
-            authType: currentReq.authType || 'none',
+            authType: 'inherit',
             authToken: currentReq.authToken || '',
             authPrefix: currentReq.authPrefix || 'Bearer',
             authUser: currentReq.authUser || '',
@@ -1392,23 +1936,27 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         StorageService.saveChain(chain);
-        expandedStepIds.add(newStepId);
-        renderWorkflowSelector();
-        renderActiveWorkflow();
-        Toast.show(`Imported current request as Step ${stepNum}`);
+        selectedStepId = newStepId;
+        renderMasterList();
+        renderDetailPane(newStepId);
+        setMobileWorkflowView('detail');
+        Toast.show(`Imported request as Step ${stepNum}`);
     });
 
     // Save Workflow Button
-    document.getElementById('save-chain-btn').addEventListener('click', () => {
-        syncAllCardsToChain();
-        renderWorkflowSelector();
+    document.getElementById('save-chain-btn')?.addEventListener('click', () => {
+        const chain = StorageService.getChain(activeChainId);
+        if (chain) StorageService.saveChain(chain);
+        renderWorkflowMetaAndAuth();
         Toast.show("Workflow saved successfully");
     });
 
     // Open Workflows Modal Button
-    document.getElementById('open-chains-btn').addEventListener('click', () => {
-        renderWorkflowSelector();
+    document.getElementById('open-chains-btn')?.addEventListener('click', () => {
         renderActiveWorkflow();
+        setMobileWorkflowView('master');
+        document.getElementById('workflow-settings-drawer')?.classList.add('hidden');
+        document.getElementById('toggle-workflow-settings-btn')?.classList.remove('active');
         document.getElementById('chains-modal').classList.remove('hidden');
     });
 

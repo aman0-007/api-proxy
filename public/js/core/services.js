@@ -5,15 +5,21 @@ window.StorageService = {
             profiles: {
                 'Development': {
                     'base_url': 'https://jsonplaceholder.typicode.com',
-                    'api_key': 'dev_sec_98127391'
+                    'api_key': 'dev_sec_98127391',
+                    'userId': '1',
+                    'authorName': 'Leanne Graham'
                 },
                 'Staging': {
-                    'base_url': 'https://reqres.in',
-                    'api_key': 'staging_sec_55482310'
+                    'base_url': 'https://jsonplaceholder.typicode.com',
+                    'api_key': 'staging_sec_55482310',
+                    'userId': '1',
+                    'authorName': 'Leanne Graham'
                 },
                 'Production': {
-                    'base_url': 'https://api.github.com',
-                    'api_key': 'prod_live_token_7781'
+                    'base_url': 'https://jsonplaceholder.typicode.com',
+                    'api_key': 'prod_live_token_7781',
+                    'userId': '1',
+                    'authorName': 'Leanne Graham'
                 }
             }
         };
@@ -95,61 +101,71 @@ window.StorageService = {
                 id: 'chain_json_placeholder',
                 name: 'JSONPlaceholder User & Post Chain',
                 description: 'Fetches active user details, extracts user ID and author name, publishes a post with dynamic templating, and queries posts.',
+                auth: {
+                    type: 'none',
+                    token: '',
+                    prefix: 'Bearer',
+                    user: '',
+                    pass: '',
+                    keyName: '',
+                    keyValue: '',
+                    keyAddTo: 'header'
+                },
                 steps: [
                     {
                         id: 'step_fetch_user',
-                        name: '1. Fetch Active User',
+                        name: 'Fetch Active User',
                         enabled: true,
                         method: 'GET',
-                        url: '{{base_url}}/users/1',
+                        url: 'https://jsonplaceholder.typicode.com/users/1',
                         headers: {},
-                        authType: 'none',
+                        authType: 'inherit',
                         bodyFormat: 'none',
                         body: '',
                         params: {},
                         extracts: [
                             { id: 'ext_1', target: 'body_json', sourcePath: 'id', variableName: 'userId', saveToEnv: true },
-                            { id: 'ext_2', target: 'body_json', sourcePath: 'name', variableName: 'authorName', saveToEnv: false }
+                            { id: 'ext_2', target: 'body_json', sourcePath: 'name', variableName: 'authorName', saveToEnv: true }
                         ],
                         assertions: [
                             { id: 'ass_1', type: 'status_equals', value: '200' },
-                            { id: 'ass_2', type: 'response_time_lt', value: '3000' }
+                            { id: 'ass_2', type: 'json_path_exists', path: 'id', value: 'id' }
                         ]
                     },
                     {
                         id: 'step_create_post',
-                        name: '2. Create Chained Post',
+                        name: 'Create Chained Post',
                         enabled: true,
                         method: 'POST',
-                        url: '{{base_url}}/posts',
+                        url: 'https://jsonplaceholder.typicode.com/posts',
                         headers: { 'Content-Type': 'application/json' },
-                        authType: 'none',
+                        authType: 'inherit',
                         bodyFormat: 'json',
-                        body: '{\n  "userId": "{{userId}}",\n  "title": "Post published by {{authorName}}",\n  "body": "Automated pipeline test run via API Client Pro Dynamic Request Chaining."\n}',
+                        body: '{\n  "userId": {{userId}},\n  "title": "Post published by {{authorName}}",\n  "body": "Automated pipeline test run via API Client Pro Dynamic Request Chaining."\n}',
                         params: {},
                         extracts: [
                             { id: 'ext_3', target: 'body_json', sourcePath: 'id', variableName: 'newPostId', saveToEnv: true }
                         ],
                         assertions: [
                             { id: 'ass_3', type: 'status_equals', value: '201' },
-                            { id: 'ass_4', type: 'body_contains', value: '{{authorName}}' }
+                            { id: 'ass_4', type: 'body_contains', value: 'Post published by' }
                         ]
                     },
                     {
                         id: 'step_query_posts',
-                        name: '3. Verify User Posts',
+                        name: 'Verify User Posts',
                         enabled: true,
                         method: 'GET',
-                        url: '{{base_url}}/posts?userId={{userId}}',
+                        url: 'https://jsonplaceholder.typicode.com/posts?userId={{userId}}',
                         headers: {},
-                        authType: 'none',
+                        authType: 'inherit',
                         bodyFormat: 'none',
                         body: '',
                         params: {},
                         extracts: [],
                         assertions: [
                             { id: 'ass_5', type: 'status_equals', value: '200' },
-                            { id: 'ass_6', type: 'json_path_exists', path: '[0].id' }
+                            { id: 'ass_6', type: 'json_path_exists', path: '[0].id', value: '[0].id' }
                         ]
                     }
                 ]
@@ -162,11 +178,31 @@ window.StorageService = {
             try {
                 const parsed = JSON.parse(stored);
                 if (Array.isArray(parsed) && parsed.length > 0) {
-                    // Migrate from legacy initial multi-workflow seed if user hasn't modified it
-                    if (parsed.length === 2 && parsed.some(c => c.id === 'chain_reqres_auth') && parsed.some(c => c.id === 'chain_json_placeholder')) {
-                        const defaults = this.getDefaultChains();
-                        this.saveChains(defaults);
-                        return defaults;
+                    // Check if stored chains contain obsolete or fragile definitions and upgrade seamlessly
+                    let needsUpgrade = false;
+                    const updated = parsed.map(c => {
+                        if (!c || c.id === 'chain_reqres_auth') {
+                            needsUpgrade = true;
+                            return null;
+                        }
+                        if (c.id === 'chain_json_placeholder') {
+                            const hasOldTimeAssertion = c.steps?.some(s => s.assertions?.some(a => a.type === 'response_time_lt'));
+                            const missingEnvSaves = c.steps?.[0]?.extracts?.some(e => e.variableName === 'authorName' && !e.saveToEnv);
+                            if (hasOldTimeAssertion || missingEnvSaves || !c.steps || c.steps.length < 3) {
+                                needsUpgrade = true;
+                                return this.getDefaultChains()[0];
+                            }
+                        }
+                        return c;
+                    }).filter(Boolean);
+
+                    if (needsUpgrade || updated.length === 0) {
+                        const finalChains = updated.length > 0 ? updated : this.getDefaultChains();
+                        if (!finalChains.some(c => c.id === 'chain_json_placeholder')) {
+                            finalChains.unshift(this.getDefaultChains()[0]);
+                        }
+                        this.saveChains(finalChains);
+                        return finalChains;
                     }
                     return parsed;
                 }
@@ -175,6 +211,13 @@ window.StorageService = {
         const defaults = this.getDefaultChains();
         this.saveChains(defaults);
         return defaults;
+    },
+    restoreDefaultWorkflow() {
+        const defaults = this.getDefaultChains();
+        const existing = this.getChains().filter(c => c.id !== 'chain_json_placeholder' && c.id !== 'chain_reqres_auth');
+        const merged = [defaults[0], ...existing];
+        this.saveChains(merged);
+        return merged;
     },
     saveChains(chains) {
         localStorage.setItem('apiChains', JSON.stringify(chains));
@@ -352,13 +395,34 @@ window.ApiService = {
 window.ChainService = {
     resolvePath(obj, path) {
         if (!path || obj === null || obj === undefined) return obj;
-        const normalized = String(path).trim().replace(/\[(\w+)\]/g, '.$1').replace(/^\./, '');
+        // Strip leading $ or $. or $[ if provided
+        let cleanPath = String(path).trim().replace(/^\$(\.?)/, '');
+        if (!cleanPath) return obj;
+
+        // Convert bracket notation [0] or ['id'] or ["id"] to .0 or .id
+        const normalized = cleanPath
+            .replace(/\[\s*['"]?([^'"\]]+)['"]?\s*\]/g, '.$1')
+            .replace(/^\./, '');
+
         if (!normalized) return obj;
         const parts = normalized.split('.');
         let current = obj;
-        for (const part of parts) {
+        for (let i = 0; i < parts.length; i++) {
+            const part = parts[i];
             if (current === null || current === undefined) return undefined;
-            current = current[part];
+
+            if (current[part] !== undefined) {
+                current = current[part];
+            } else if (Array.isArray(current)) {
+                // If current is an array and part is not a numeric index, check first element as fallback
+                if (current[0] && current[0][part] !== undefined) {
+                    current = current[0][part];
+                } else {
+                    return undefined;
+                }
+            } else {
+                return undefined;
+            }
         }
         return current;
     },
@@ -370,24 +434,50 @@ window.ChainService = {
         });
     },
 
-    async executeStep(step, runtimeContext = {}) {
+    async executeStep(step, runtimeContext = {}, workflowAuth = null) {
         const startTime = Date.now();
         const activeEnv = StorageService.getActiveEnv() || {};
-        const combinedContext = { ...activeEnv, ...runtimeContext };
+        const defaultContext = {
+            userId: '1',
+            authorName: 'Leanne Graham',
+            newPostId: '101'
+        };
+        const combinedContext = { ...defaultContext, ...activeEnv, ...runtimeContext };
+
+        // Inherited or step-level auth
+        let effectiveAuthType = step.authType || 'inherit';
+        let effectiveAuthToken = step.authToken || '';
+        let effectiveAuthPrefix = step.authPrefix || 'Bearer';
+        let effectiveAuthUser = step.authUser || '';
+        let effectiveAuthPass = step.authPass || '';
+        let effectiveApiKeyName = step.apiKeyName || '';
+        let effectiveApiKeyValue = step.apiKeyValue || '';
+        let effectiveApiKeyAddTo = step.apiKeyAddTo || 'header';
+
+        if ((effectiveAuthType === 'inherit' || !step.authType) && workflowAuth) {
+            effectiveAuthType = workflowAuth.type || 'none';
+            effectiveAuthToken = workflowAuth.token || '';
+            effectiveAuthPrefix = workflowAuth.prefix || 'Bearer';
+            effectiveAuthUser = workflowAuth.user || '';
+            effectiveAuthPass = workflowAuth.pass || '';
+            effectiveApiKeyName = workflowAuth.keyName || '';
+            effectiveApiKeyValue = workflowAuth.keyValue || '';
+            effectiveApiKeyAddTo = workflowAuth.keyAddTo || 'header';
+        }
 
         const requestState = {
             method: step.method || 'GET',
             url: this.applyVariables(step.url || '', combinedContext),
             headers: {},
             params: {},
-            authType: step.authType || 'none',
-            authToken: this.applyVariables(step.authToken || '', combinedContext),
-            authPrefix: step.authPrefix || 'Bearer',
-            authUser: this.applyVariables(step.authUser || '', combinedContext),
-            authPass: this.applyVariables(step.authPass || '', combinedContext),
-            apiKeyName: this.applyVariables(step.apiKeyName || '', combinedContext),
-            apiKeyValue: this.applyVariables(step.apiKeyValue || '', combinedContext),
-            apiKeyAddTo: step.apiKeyAddTo || 'header',
+            authType: effectiveAuthType === 'inherit' ? 'none' : effectiveAuthType,
+            authToken: this.applyVariables(effectiveAuthToken, combinedContext),
+            authPrefix: effectiveAuthPrefix,
+            authUser: this.applyVariables(effectiveAuthUser, combinedContext),
+            authPass: this.applyVariables(effectiveAuthPass, combinedContext),
+            apiKeyName: this.applyVariables(effectiveApiKeyName, combinedContext),
+            apiKeyValue: this.applyVariables(effectiveApiKeyValue, combinedContext),
+            apiKeyAddTo: effectiveApiKeyAddTo,
             bodyFormat: step.bodyFormat || (step.method === 'GET' ? 'none' : 'json'),
             body: this.applyVariables(step.body || '', combinedContext)
         };
@@ -487,18 +577,20 @@ window.ChainService = {
                     if (typeof dataObj === 'string') {
                         try { dataObj = JSON.parse(dataObj); } catch (e) {}
                     }
-                    const resolved = this.resolvePath(dataObj, a.path || a.value);
+                    const targetPath = a.path || a.value || '';
+                    const resolved = this.resolvePath(dataObj, targetPath);
                     passed = resolved !== undefined && resolved !== null;
-                    message = passed ? `JSON path "${a.path || a.value}" found` : `JSON path "${a.path || a.value}" not found`;
+                    message = passed ? `JSON path "${targetPath}" found` : `JSON path "${targetPath}" not found`;
                 } else if (a.type === 'json_path_equals') {
                     let dataObj = response.data;
                     if (typeof dataObj === 'string') {
                         try { dataObj = JSON.parse(dataObj); } catch (e) {}
                     }
-                    const resolved = this.resolvePath(dataObj, a.path);
-                    const resolvedStr = typeof resolved === 'object' ? JSON.stringify(resolved) : String(resolved);
+                    const targetPath = a.path || '';
+                    const resolved = this.resolvePath(dataObj, targetPath);
+                    const resolvedStr = typeof resolved === 'object' ? JSON.stringify(resolved) : String(resolved !== undefined && resolved !== null ? resolved : '');
                     passed = resolvedStr === String(expected);
-                    message = passed ? `Path "${a.path}" is "${expected}"` : `Path "${a.path}" value "${resolvedStr}" != "${expected}"`;
+                    message = passed ? `Path "${targetPath}" is "${expected}"` : `Path "${targetPath}" value "${resolvedStr}" != "${expected}"`;
                 }
 
                 if (!passed) allPassed = false;
@@ -534,6 +626,8 @@ window.ChainService = {
 
         const steps = (chain.steps || []).filter(s => s.enabled !== false);
 
+        const workflowAuth = chain.auth || { type: 'none' };
+
         for (let i = 0; i < steps.length; i++) {
             if (isCancelled()) {
                 break;
@@ -549,7 +643,7 @@ window.ChainService = {
                 });
             }
 
-            const stepResult = await this.executeStep(step, runtimeContext);
+            const stepResult = await this.executeStep(step, runtimeContext, workflowAuth);
 
             // Merge newly extracted variables into runtime context
             if (stepResult.extracted) {

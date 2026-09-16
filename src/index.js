@@ -3,7 +3,7 @@ import cors from 'cors';
 import proxyRoutes from './routes/proxy.routes.js';
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = 3000;
 
 // Middleware
 app.use(cors()); // Crucial: Allows your frontend to bypass browser CORS
